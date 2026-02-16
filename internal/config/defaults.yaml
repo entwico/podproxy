@@ -1,0 +1,15 @@
+listenAddress: "127.0.0.1:9080"
+httpListenAddress: "127.0.0.1:9081"
+pacListenAddress: "127.0.0.1:9082"
+
+kubeconfigs:
+  - "~/.kube/configs/*.yml"
+  - "~/.kube/configs/*.yaml"
+  - "~/.kube/conf/*.yml"
+  - "~/.kube/conf/*.yaml"
+
+log:
+  level: info
+  formatter: text
+  colors: false
+  timestamp: false

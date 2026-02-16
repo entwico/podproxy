@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.github.entwico.podproxy</string>
+
+    <key>Program</key>
+    <string>/usr/local/bin/podproxy</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>/usr/local/bin/podproxy</string>
+        <string>--config</string>
+        <string>__HOME__/.config/podproxy/config.yaml</string>
+    </array>
+
+    <key>RunAtLoad</key>
+    <true/>
+
+    <key>KeepAlive</key>
+    <true/>
+
+    <key>StandardOutPath</key>
+    <string>__HOME__/Library/Logs/podproxy.stdout.log</string>
+
+    <key>StandardErrorPath</key>
+    <string>__HOME__/Library/Logs/podproxy.stderr.log</string>
+
+    <key>WorkingDirectory</key>
+    <string>__HOME__</string>
+</dict>
+</plist>

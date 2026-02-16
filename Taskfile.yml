@@ -1,0 +1,31 @@
+version: "3"
+output: "group"
+
+vars:
+  BUILD_DIR: dist
+
+tasks:
+  default:
+    cmds:
+      - task: build
+
+  build:
+    cmds:
+      - task: clean
+      - goreleaser build --clean --snapshot
+
+  clean:
+    cmds:
+      - rm -rf {{.BUILD_DIR}}/*
+
+  test:
+    cmds:
+      - task: clean
+      - mkdir -p {{.BUILD_DIR}}
+      - go test -v -race -coverprofile=./{{.BUILD_DIR}}/coverage.out ./...
+      - go tool cover -html=./{{.BUILD_DIR}}/coverage.out -o ./{{.BUILD_DIR}}/coverage.html
+
+  lint:
+    cmds:
+      - golangci-lint version
+      - golangci-lint run

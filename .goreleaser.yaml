@@ -1,0 +1,22 @@
+version: 2
+
+snapshot:
+  version_template: "{{ .FullCommit }}-SNAPSHOT"
+
+builds:
+  - id: "podproxy"
+    main: "./cmd/podproxy"
+    binary: "{{ .ProjectName }}_{{ .Os }}_{{ .Arch }}"
+    flags:
+      - -trimpath
+    ldflags:
+      - -s -w
+    no_unique_dist_dir: true
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+    goarch:
+      - amd64
+      - arm64
