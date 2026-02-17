@@ -31,9 +31,10 @@ type HTTPProxy struct {
 	DialContext func(ctx context.Context, network, addr string) (net.Conn, error)
 	Logger      *slog.Logger
 
-	initOnce    sync.Once
-	transportMu sync.RWMutex
-	transport   *http.Transport
+	initOnce     sync.Once
+	transportMu  sync.RWMutex
+	transport    *http.Transport
+	roundTripper http.RoundTripper
 }
 
 func (p *HTTPProxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -95,26 +96,29 @@ func (p *HTTPProxy) handleConnect(w http.ResponseWriter, r *http.Request) {
 	relay(client, upstream)
 }
 
-func (p *HTTPProxy) httpTransport() *http.Transport {
+func (p *HTTPProxy) httpTransport() http.RoundTripper {
 	p.initOnce.Do(func() {
 		t := &http.Transport{
 			DialContext:           p.DialContext,
 			MaxIdleConns:          100,
 			MaxIdleConnsPerHost:   10,
-			IdleConnTimeout:       90 * time.Second,
+			IdleConnTimeout:       30 * time.Second,
 			TLSHandshakeTimeout:   10 * time.Second,
 			ExpectContinueTimeout: 1 * time.Second,
 		}
 
+		rt := &retryTransport{base: t}
+
 		p.transportMu.Lock()
 		p.transport = t
+		p.roundTripper = rt
 		p.transportMu.Unlock()
 	})
 
 	p.transportMu.RLock()
 	defer p.transportMu.RUnlock()
 
-	return p.transport
+	return p.roundTripper
 }
 
 func (p *HTTPProxy) handleHTTP(w http.ResponseWriter, r *http.Request) {
@@ -163,7 +167,7 @@ func relay(a, b net.Conn) {
 
 	go func() {
 		if _, err := io.Copy(b, a); err != nil && !isClosedConnErr(err) {
-			slog.Debug("relay a→b copy error", "error", err)
+			logRelayError("relay a→b copy error", err)
 		}
 
 		b.Close()
@@ -171,7 +175,7 @@ func relay(a, b net.Conn) {
 	}()
 
 	if _, err := io.Copy(a, b); err != nil && !isClosedConnErr(err) {
-		slog.Debug("relay b→a copy error", "error", err)
+		logRelayError("relay b→a copy error", err)
 	}
 
 	a.Close()
@@ -180,6 +184,17 @@ func relay(a, b net.Conn) {
 
 func isClosedConnErr(err error) bool {
 	return errors.Is(err, net.ErrClosed) || errors.Is(err, io.EOF)
+}
+
+// logRelayError logs relay errors, promoting broken pipe errors to Warn
+// since they indicate a connection dropped by the remote side.
+func logRelayError(msg string, err error) {
+	if isBrokenPipeErr(err) {
+		slog.Warn(msg, "error", err)
+		return
+	}
+
+	slog.Debug(msg, "error", err)
 }
 
 func (p *HTTPProxy) logError(msg string, args ...any) {

@@ -2,12 +2,15 @@ package kube
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"net"
 	"net/http"
 	"strconv"
 	"strings"
+	"syscall"
 	"time"
 
 	"k8s.io/client-go/kubernetes"
@@ -81,46 +84,160 @@ type PortForwarder struct {
 	Clientset        *kubernetes.Clientset
 	DefaultNamespace string
 	Logger           *slog.Logger
+
+	// test overrides — if nil/zero, the real implementations and defaults are used.
+	dialFunc    func(namespace, pod string, port int) (*StreamConn, error)
+	resolveFunc func(ctx context.Context, namespace, serviceName string) (string, error)
+	baseBackoff time.Duration
 }
 
-// dialTarget resolves the pre-parsed target and establishes an SPDY port-forward.
+const (
+	dialMaxAttempts  = 6
+	dialBaseBackoff  = 1 * time.Second
+	dialBackoffScale = 2
+)
+
+// dialTarget resolves the pre-parsed target and dials the pod with retries.
+// For service targets, each retry re-resolves the service to pick a different
+// ready pod (e.g. after a rolling restart). This gives the retry loop a ~31s
+// window (1s + 2s + 4s + 8s + 16s) which covers most pod restart scenarios.
 func (k *PortForwarder) dialTarget(ctx context.Context, originalAddr string, target Target) (net.Conn, error) {
-	podName := target.PodName
+	dial := k.dialFunc
+	if dial == nil {
+		dial = k.dialPod
+	}
 
-	if target.IsService {
-		var err error
-
-		podName, err = ResolveServiceToPod(ctx, k.Clientset, target.Namespace, target.ServiceName)
-		if err != nil {
-			return nil, err
-		}
-
-		if k.Logger != nil {
-			k.Logger.Info("resolved service to pod", "namespace", target.Namespace, "service", target.ServiceName, "pod", podName)
+	resolve := k.resolveFunc
+	if resolve == nil {
+		resolve = func(ctx context.Context, ns, svc string) (string, error) {
+			return ResolveServiceToPod(ctx, k.Clientset, ns, svc)
 		}
 	}
 
-	conn, err := k.dialPod(target.Namespace, podName, target.Port)
-	if err != nil {
-		if k.Logger != nil {
-			k.Logger.Error("failed to dial pod", "namespace", target.Namespace, "pod", podName, "port", target.Port, "error", err)
+	var lastErr error
+
+	for attempt := range dialMaxAttempts {
+		podName := target.PodName
+
+		if target.IsService {
+			var err error
+
+			podName, err = resolve(ctx, target.Namespace, target.ServiceName)
+			if err != nil {
+				lastErr = err
+
+				if !isRetriableError(err) {
+					break
+				}
+
+				if ok := k.waitBackoff(ctx, attempt, target.Namespace, target.ServiceName, 0, err); !ok {
+					return nil, fmt.Errorf("dial retry cancelled: %w", ctx.Err())
+				}
+
+				continue
+			}
+
+			if attempt == 0 && k.Logger != nil {
+				k.Logger.Info("resolved service to pod", "namespace", target.Namespace, "service", target.ServiceName, "pod", podName)
+			}
 		}
 
-		return nil, err
-	}
+		conn, err := dial(target.Namespace, podName, target.Port)
+		if err == nil {
+			resolvedTarget := fmt.Sprintf("%s/%s:%d", target.Namespace, podName, target.Port)
 
-	resolvedTarget := fmt.Sprintf("%s/%s:%d", target.Namespace, podName, target.Port)
+			if k.Logger != nil {
+				k.Logger.Info("connect", "addr", originalAddr, "target", resolvedTarget)
+			}
+
+			return &logOnCloseConn{
+				StreamConn: conn,
+				logger:     k.Logger,
+				origAddr:   originalAddr,
+				resolved:   resolvedTarget,
+			}, nil
+		}
+
+		lastErr = err
+
+		if !isRetriableError(err) {
+			break
+		}
+
+		if ok := k.waitBackoff(ctx, attempt, target.Namespace, podName, target.Port, err); !ok {
+			return nil, fmt.Errorf("dial retry cancelled: %w", ctx.Err())
+		}
+	}
 
 	if k.Logger != nil {
-		k.Logger.Info("connect", "addr", originalAddr, "target", resolvedTarget)
+		k.Logger.Error("failed to connect", "addr", originalAddr, "error", lastErr)
 	}
 
-	return &logOnCloseConn{
-		StreamConn: conn,
-		logger:     k.Logger,
-		origAddr:   originalAddr,
-		resolved:   resolvedTarget,
-	}, nil
+	return nil, lastErr
+}
+
+// waitBackoff sleeps for the exponential backoff duration, logging the retry.
+// Returns false if the context was cancelled during the wait.
+func (k *PortForwarder) waitBackoff(ctx context.Context, attempt int, namespace, name string, port int, err error) bool {
+	// don't sleep after the last attempt
+	if attempt == dialMaxAttempts-1 {
+		return true
+	}
+
+	base := k.baseBackoff
+	if base == 0 {
+		base = dialBaseBackoff
+	}
+
+	backoff := base * time.Duration(pow(dialBackoffScale, attempt))
+
+	if k.Logger != nil {
+		k.Logger.Warn("retrying connection",
+			"namespace", namespace, "target", name, "port", port,
+			"attempt", attempt+1, "backoff", backoff, "error", err,
+		)
+	}
+
+	select {
+	case <-ctx.Done():
+		return false
+	case <-time.After(backoff):
+		return true
+	}
+}
+
+func pow(base, exp int) int {
+	result := 1
+	for range exp {
+		result *= base
+	}
+
+	return result
+}
+
+// isRetriableError returns true for transient errors that are safe to retry.
+// This includes network errors (broken pipe, connection reset, refused, EOF,
+// timeouts) and service resolution failures (no ready pods during a restart).
+func isRetriableError(err error) bool {
+	if errors.Is(err, syscall.EPIPE) ||
+		errors.Is(err, syscall.ECONNRESET) ||
+		errors.Is(err, syscall.ECONNREFUSED) ||
+		errors.Is(err, io.EOF) ||
+		errors.Is(err, io.ErrUnexpectedEOF) {
+		return true
+	}
+
+	var netErr net.Error
+	if errors.As(err, &netErr) && netErr.Timeout() {
+		return true
+	}
+
+	// "no ready pod endpoints" happens when a service's pods are restarting
+	if strings.Contains(err.Error(), "no ready pod endpoints") {
+		return true
+	}
+
+	return false
 }
 
 // dialPod establishes an SPDY port-forward connection to the given pod and port.
