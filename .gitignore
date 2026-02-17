@@ -1,5 +1,5 @@
 dist/
-podproxy
+/podproxy
 .env
 .DS_Store
 .idea/
