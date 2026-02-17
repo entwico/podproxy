@@ -6,12 +6,11 @@ snapshot:
 builds:
   - id: "podproxy"
     main: "./cmd/podproxy"
-    binary: "{{ .ProjectName }}_{{ .Os }}_{{ .Arch }}"
+    binary: "podproxy"
     flags:
       - -trimpath
     ldflags:
       - -s -w -X {{.ModulePath}}/internal/version.Version={{.Version}}
-    no_unique_dist_dir: true
     env:
       - CGO_ENABLED=0
     goos:
@@ -22,8 +21,14 @@ builds:
       - arm64
 
 archives:
-  - formats:
+  - id: binary
+    formats:
       - binary
+    name_template: "{{ .ProjectName }}_{{ .Os }}_{{ .Arch }}"
+  - id: archive
+    formats:
+      - tar.gz
+    name_template: "{{ .ProjectName }}_{{ .Os }}_{{ .Arch }}"
 
 checksum:
   name_template: "checksums.txt"
@@ -36,6 +41,21 @@ changelog:
       - "^test:"
       - "^ci:"
       - "^chore:"
+
+brews:
+  - name: podproxy
+    ids:
+      - archive
+    homepage: "https://github.com/entwico/podproxy"
+    description: "Kubernetes pod proxy that routes traffic through pod port-forwarding"
+    license: "MIT"
+    directory: Formula
+    commit_msg_template: "chore: update {{ .ProjectName }} formula to {{ .Tag }}"
+    repository:
+      owner: entwico
+      name: homebrew-tap
+      branch: main
+      token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
 
 release:
   github:

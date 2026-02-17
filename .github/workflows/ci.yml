@@ -64,8 +64,88 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          # copy raw binaries from build subdirs to dist/ root for direct download
+          for f in dist/podproxy_*_v*/podproxy; do
+            dir_name=$(basename "$(dirname "$f")")
+            archive_name=$(echo "$dir_name" | sed 's/_v[0-9.].*$//')
+            cp "$f" "dist/${archive_name}"
+          done
+
           gh release delete latest --yes --cleanup-tag 2>/dev/null || true
-          gh release create latest dist/podproxy_* dist/checksums.txt \
+          gh release create latest \
+            dist/podproxy_darwin_amd64 \
+            dist/podproxy_darwin_arm64 \
+            dist/podproxy_linux_amd64 \
+            dist/podproxy_linux_arm64 \
+            dist/podproxy_darwin_amd64.tar.gz \
+            dist/podproxy_darwin_arm64.tar.gz \
+            dist/podproxy_linux_amd64.tar.gz \
+            dist/podproxy_linux_arm64.tar.gz \
+            dist/checksums.txt \
             --title "Latest Build" \
             --notes "Built from commit ${GITHUB_SHA::7} on $(date -u +%Y-%m-%d)" \
             --prerelease
+
+      - name: Publish snapshot formula to Homebrew tap
+        env:
+          HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+        run: |
+          REPO="entwico/podproxy"
+          RELEASE_TAG="latest"
+
+          darwin_amd64_sha=$(sha256sum dist/podproxy_darwin_amd64.tar.gz | awk '{print $1}')
+          darwin_arm64_sha=$(sha256sum dist/podproxy_darwin_arm64.tar.gz | awk '{print $1}')
+          linux_amd64_sha=$(sha256sum dist/podproxy_linux_amd64.tar.gz | awk '{print $1}')
+          linux_arm64_sha=$(sha256sum dist/podproxy_linux_arm64.tar.gz | awk '{print $1}')
+
+          BASE_URL="https://github.com/${REPO}/releases/download/${RELEASE_TAG}"
+
+          cat > /tmp/podproxy@latest.rb <<FORMULA
+          # typed: false
+          # frozen_string_literal: true
+
+          class PodproxyATLatest < Formula
+            desc "Kubernetes pod proxy that routes traffic through pod port-forwarding"
+            homepage "https://github.com/${REPO}"
+            license "MIT"
+
+            on_macos do
+              if Hardware::CPU.arm?
+                url "${BASE_URL}/podproxy_darwin_arm64.tar.gz"
+                sha256 "${darwin_arm64_sha}"
+              else
+                url "${BASE_URL}/podproxy_darwin_amd64.tar.gz"
+                sha256 "${darwin_amd64_sha}"
+              end
+            end
+
+            on_linux do
+              if Hardware::CPU.arm?
+                url "${BASE_URL}/podproxy_linux_arm64.tar.gz"
+                sha256 "${linux_arm64_sha}"
+              else
+                url "${BASE_URL}/podproxy_linux_amd64.tar.gz"
+                sha256 "${linux_amd64_sha}"
+              end
+            end
+
+            def install
+              bin.install "podproxy"
+            end
+
+            test do
+              system "#{bin}/podproxy", "--version"
+            end
+          end
+          FORMULA
+
+          git clone "https://x-access-token:${HOMEBREW_TAP_TOKEN}@github.com/entwico/homebrew-tap.git" /tmp/homebrew-tap
+          mkdir -p /tmp/homebrew-tap/Formula
+          cp /tmp/podproxy@latest.rb /tmp/homebrew-tap/Formula/podproxy@latest.rb
+          cd /tmp/homebrew-tap
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add Formula/podproxy@latest.rb
+          git diff --cached --quiet && echo "No changes to commit" && exit 0
+          git commit -m "chore: update podproxy@latest formula to ${GITHUB_SHA::7}"
+          git push
