@@ -131,6 +131,35 @@ jobs:
 
             def install
               bin.install "podproxy"
+              (etc/"podproxy").install "defaults.yaml" => "config.yaml" unless (etc/"podproxy/config.yaml").exist?
+            end
+
+            service do
+              run [opt_bin/"podproxy", "--config", etc/"podproxy/config.yaml"]
+              keep_alive true
+              log_path var/"log/podproxy.log"
+              error_log_path var/"log/podproxy.log"
+              working_dir var
+            end
+
+            def caveats
+              <<~EOS
+                Configuration file:
+                  #{etc}/podproxy/config.yaml
+
+                A default config is installed if one does not already exist.
+                Edit it before starting the service:
+                  $EDITOR #{etc}/podproxy/config.yaml
+
+                To start podproxy as a background service:
+                  brew services start #{name}
+
+                To stop the service:
+                  brew services stop #{name}
+
+                Logs are written to:
+                  #{var}/log/podproxy.log
+              EOS
             end
 
             test do
