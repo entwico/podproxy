@@ -100,11 +100,11 @@ jobs:
 
           BASE_URL="https://github.com/${REPO}/releases/download/${RELEASE_TAG}"
 
-          cat > /tmp/podproxy@latest.rb <<FORMULA
+          cat > /tmp/podproxy-latest.rb <<FORMULA
           # typed: false
           # frozen_string_literal: true
 
-          class PodproxyATLatest < Formula
+          class PodproxyLatest < Formula
             desc "Kubernetes pod proxy that routes traffic through pod port-forwarding"
             homepage "https://github.com/${REPO}"
             license "MIT"
@@ -141,11 +141,11 @@ jobs:
 
           git clone "https://x-access-token:${HOMEBREW_TAP_TOKEN}@github.com/entwico/homebrew-tap.git" /tmp/homebrew-tap
           mkdir -p /tmp/homebrew-tap/Formula
-          cp /tmp/podproxy@latest.rb /tmp/homebrew-tap/Formula/podproxy@latest.rb
+          cp /tmp/podproxy-latest.rb /tmp/homebrew-tap/Formula/podproxy-latest.rb
           cd /tmp/homebrew-tap
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add Formula/podproxy@latest.rb
+          git add Formula/podproxy-latest.rb
           git diff --cached --quiet && echo "No changes to commit" && exit 0
-          git commit -m "chore: update podproxy@latest formula to ${GITHUB_SHA::7}"
+          git commit -m "chore: update podproxy-latest formula to ${GITHUB_SHA::7}"
           git push
