@@ -10,7 +10,7 @@ builds:
     flags:
       - -trimpath
     ldflags:
-      - -s -w
+      - -s -w -X {{.ModulePath}}/internal/version.Version={{.Version}}
     no_unique_dist_dir: true
     env:
       - CGO_ENABLED=0
@@ -20,3 +20,27 @@ builds:
     goarch:
       - amd64
       - arm64
+
+archives:
+  - format_overrides:
+      - goos: darwin
+        format: zip
+    name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+
+checksum:
+  name_template: "checksums.txt"
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
+      - "^ci:"
+      - "^chore:"
+
+release:
+  github:
+    owner: entwico
+    name: podproxy
+  prerelease: auto
