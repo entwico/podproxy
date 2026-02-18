@@ -35,7 +35,7 @@ func main() {
 		*configPath = "config.yaml"
 	}
 
-	cfg, err := config.LoadConfig(*configPath)
+	cfg, clusters, err := config.LoadConfig(*configPath)
 	if err != nil {
 		slog.Error("configuration error", "error", err)
 		os.Exit(1)
@@ -48,13 +48,13 @@ func main() {
 
 	defer closer.Close()
 
-	forwarders := make(map[string]*kube.PortForwarder, len(cfg.ResolvedClusters))
+	forwarders := make(map[string]*kube.PortForwarder, len(clusters))
 
-	for _, rc := range cfg.ResolvedClusters {
+	for _, rc := range clusters {
 		restCfg, clientset, err := kube.NewKubeClient(rc.Kubeconfig, rc.Context)
 		if err != nil {
-			logger.Error("failed to create kubernetes client", "cluster", rc.Name, "error", err)
-			os.Exit(1)
+			logger.Warn("skipping cluster due to client error", "cluster", rc.Name, "error", err)
+			continue
 		}
 
 		forwarders[rc.Name] = &kube.PortForwarder{
@@ -65,6 +65,11 @@ func main() {
 		}
 	}
 
+	if len(forwarders) == 0 {
+		logger.Error("no usable clusters found")
+		os.Exit(1)
+	}
+
 	dialer := &kube.ClusterDialer{Forwarders: forwarders}
 
 	server := socks5.NewServer(
@@ -73,7 +78,7 @@ func main() {
 		socks5.WithLogger(&slogErrorLogger{logger: logger.With("component", "socks5")}),
 	)
 
-	logger.Info("socks5 proxy server is running", "addr", cfg.ListenAddress)
+	logger.Info("starting socks5 proxy server", "addr", cfg.ListenAddress)
 
 	go func() {
 		if err := server.ListenAndServe("tcp", cfg.ListenAddress); err != nil {
@@ -95,7 +100,7 @@ func main() {
 			ReadHeaderTimeout: 10 * time.Second,
 		}
 
-		logger.Info("http proxy server is running", "addr", cfg.HTTPListenAddress)
+		logger.Info("starting http proxy server", "addr", cfg.HTTPListenAddress)
 		gracefulShutdown(ctx, httpServer, logger, "http server")
 
 		go func() {
@@ -108,7 +113,7 @@ func main() {
 
 	if cfg.PACListenAddress != "" {
 		pacServer := &proxy.PACServer{
-			ClusterNames:     clusterNames(cfg),
+			ClusterNames:     clusterNames(clusters),
 			SOCKSAddress:     cfg.ListenAddress,
 			HTTPProxyAddress: cfg.HTTPListenAddress,
 		}
@@ -119,7 +124,7 @@ func main() {
 			ReadHeaderTimeout: 10 * time.Second,
 		}
 
-		logger.Info("proxy auto-configuration server is running", "addr", cfg.PACListenAddress, "clusters", clusterNames(cfg))
+		logger.Info("starting proxy auto-configuration server", "addr", cfg.PACListenAddress, "clusters", clusterNames(clusters))
 		gracefulShutdown(ctx, pacHTTPServer, logger, "pac server")
 
 		go func() {
@@ -158,9 +163,9 @@ func gracefulShutdown(ctx context.Context, server *http.Server, logger *slog.Log
 	}()
 }
 
-func clusterNames(cfg *config.Config) []string {
-	names := make([]string, len(cfg.ResolvedClusters))
-	for i, rc := range cfg.ResolvedClusters {
+func clusterNames(clusters []config.ResolvedCluster) []string {
+	names := make([]string, len(clusters))
+	for i, rc := range clusters {
 		names[i] = rc.Name
 	}
 

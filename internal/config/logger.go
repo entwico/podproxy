@@ -1,6 +1,7 @@
 package config
 
 import (
+	"fmt"
 	"log/slog"
 	"os"
 	"strings"
@@ -70,7 +71,27 @@ func SetupGlobalLogger(c *Config) error {
 		_ = zapLogger.Sync()
 	})
 
-	Logger = slog.New(slogzap.Option{Level: slog.LevelDebug, Logger: zapLogger}.NewZapHandler())
+	Logger = slog.New(slogzap.Option{
+		Level:  slog.LevelDebug,
+		Logger: zapLogger,
+		// slog-common's ReplaceError expands errors into map[string]any with
+		// "error", "kind", and "stack" keys. "kind" is just the Go type name
+		// and "stack" is always nil — flatten back to a plain string.
+		ReplaceAttr: func(_ []string, a slog.Attr) slog.Attr {
+			m, ok := a.Value.Any().(map[string]any)
+			if !ok {
+				return a
+			}
+
+			if errMsg, hasErr := m["error"]; hasErr {
+				if _, hasKind := m["kind"]; hasKind {
+					return slog.String(a.Key, fmt.Sprint(errMsg))
+				}
+			}
+
+			return a
+		},
+	}.NewZapHandler())
 	slog.SetDefault(Logger)
 
 	return nil

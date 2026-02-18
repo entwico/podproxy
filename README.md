@@ -76,48 +76,41 @@ task build
 
 ## Usage
 
-### Minimal (single kubeconfig)
-
 ```sh
-podproxy --kubeconfig ~/.kube/config
-```
-
-This starts a SOCKS5 proxy on `127.0.0.1:1080`. Every context in the kubeconfig becomes an available cluster.
-
-### With all options
-
-```sh
-podproxy \
-  --config config.yaml \
-  --listen 127.0.0.1:1080 \
-  --http-listen 127.0.0.1:8080 \
-  --pac-listen 127.0.0.1:8081 \
-  --kubeconfig ~/.kube/config
+podproxy --config config.yaml
 ```
 
 ### CLI flags
 
 | Flag | Default | Description |
 |---|---|---|
-| `--config` | | Path to YAML config file (overrides other flags) |
-| `--listen` | `127.0.0.1:1080` | SOCKS5 listen address |
-| `--http-listen` | *(disabled)* | HTTP CONNECT proxy listen address |
-| `--pac-listen` | *(disabled)* | PAC file server listen address |
-| `--kubeconfig` | | Path to kubeconfig file |
+| `--config` | `config.yaml` | Path to YAML config file |
+| `--version` | | Print version information and exit |
 
-Either `--config` or `--kubeconfig` must be specified.
+## Kubeconfig discovery
+
+podproxy discovers Kubernetes contexts using the same conventions as `kubectl`, in three phases:
+
+1. **Default kubeconfig** (`~/.kube/config`) — loaded automatically if the file exists
+2. **`KUBECONFIG` environment variable** — colon-delimited (Unix) or semicolon-delimited (Windows) list of paths
+3. **Explicit paths and globs** from the `kubeconfigs` config field
+
+Contexts from all phases are merged. If the same context appears in multiple sources, it is resolved from the first phase that provides it (duplicates are skipped). Each phase can be independently disabled via config fields.
 
 ## Configuration
 
-When using `--config`, provide a YAML file:
+Provide a YAML config file via `--config`:
 
 ```yaml
 listenAddress: "127.0.0.1:1080"
 httpListenAddress: "127.0.0.1:8080"
 pacListenAddress: "127.0.0.1:8081"
 
+# skipDefaultKubeconfig: true   # skip loading ~/.kube/config
+# skipKubeconfigEnv: true       # skip reading KUBECONFIG env var
+
 kubeconfigs:
-  - ~/.kube/config
+  - ~/.kube/configs/*.yaml
   - ~/.kube/config-production
 
 log:
@@ -127,14 +120,16 @@ log:
 
 | Field | Default | Description |
 |---|---|---|
-| `listenAddress` | `127.0.0.1:1080` | SOCKS5 proxy listen address |
+| `listenAddress` | `127.0.0.1:9080` | SOCKS5 proxy listen address |
 | `httpListenAddress` | *(disabled)* | HTTP CONNECT proxy listen address |
 | `pacListenAddress` | *(disabled)* | PAC file server listen address |
-| `kubeconfigs` | | List of kubeconfig file paths (supports `~`) |
+| `skipDefaultKubeconfig` | `false` | Skip loading the default `~/.kube/config` |
+| `skipKubeconfigEnv` | `false` | Skip reading the `KUBECONFIG` environment variable |
+| `kubeconfigs` | | List of kubeconfig file paths or glob patterns (supports `~`) |
 | `log.level` | `info` | Log level: `debug`, `info`, `warn`, `error` |
 | `log.format` | `text` | Log format: `text`, `json` |
 
-All contexts from all listed kubeconfig files are discovered automatically. The context name becomes the cluster identifier used in addresses.
+All contexts from all discovered kubeconfig files are available automatically. The context name becomes the cluster identifier used in addresses.
 
 ## PAC auto-configuration
 

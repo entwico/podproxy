@@ -1,6 +1,8 @@
 listenAddress: "127.0.0.1:9080"
 httpListenAddress: "127.0.0.1:9081"
 pacListenAddress: "127.0.0.1:9082"
+skipDefaultKubeconfig: false
+skipKubeconfigEnv: false
 
 kubeconfigs:
   - "~/.kube/configs/*.yml"
@@ -10,6 +12,7 @@ kubeconfigs:
 
 log:
   level: info
+  file: ""
   formatter: text
   colors: false
   timestamp: false
