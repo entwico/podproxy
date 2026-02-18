@@ -74,6 +74,39 @@ Requires [Task](https://taskfile.dev) and [GoReleaser](https://goreleaser.com):
 task build
 ```
 
+### Docker
+
+Multi-arch images (`linux/amd64`, `linux/arm64`) are published to GHCR:
+
+```sh
+docker run -d --name podproxy \
+  -v ~/.kube:/home/podproxy/.kube:ro \
+  -v ./config.yaml:/home/podproxy/config.yaml:ro \
+  -p 9080:9080 \
+  -p 8080:8080 \
+  -p 8081:8081 \
+  ghcr.io/entwico/podproxy:latest
+```
+
+Or with `docker compose`:
+
+```yaml
+# compose.yaml
+services:
+  podproxy:
+    image: ghcr.io/entwico/podproxy:latest
+    volumes:
+      - ~/.kube:/home/podproxy/.kube:ro
+      - ./config.yaml:/home/podproxy/config.yaml:ro
+    ports:
+      - "9080:9080"   # SOCKS5
+      - "8080:8080"   # HTTP
+      - "8081:8081"   # PAC
+    restart: unless-stopped
+```
+
+> **Note:** When running in Docker, use `0.0.0.0` instead of `127.0.0.1` for listen addresses in your config so the ports are reachable from the host.
+
 ## Usage
 
 ```sh
