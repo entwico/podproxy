@@ -22,6 +22,8 @@ jobs:
           go-version-file: go.mod
 
       - uses: golangci/golangci-lint-action@v7
+        with:
+          version: v2.10.1
 
   test:
     name: Test
@@ -197,7 +199,7 @@ jobs:
       - uses: goreleaser/goreleaser-action@v6
         with:
           version: "~> v2"
-          args: build --clean
+          args: build --snapshot --clean
 
       - name: Copy binaries for Docker build
         run: |
