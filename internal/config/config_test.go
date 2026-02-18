@@ -18,25 +18,25 @@ func writeKubeconfig(t *testing.T, dir, filename string, contexts map[string]str
 	content.WriteString("apiVersion: v1\nkind: Config\nclusters:\n")
 
 	for name := range contexts {
-		content.WriteString(fmt.Sprintf("- cluster:\n    server: https://%s.example.com\n  name: %s\n", name, name))
+		fmt.Fprintf(&content, "- cluster:\n    server: https://%s.example.com\n  name: %s\n", name, name)
 	}
 
 	content.WriteString("contexts:\n")
 
 	for name, ns := range contexts {
-		content.WriteString(fmt.Sprintf("- context:\n    cluster: %s\n    user: %s\n", name, name))
+		fmt.Fprintf(&content, "- context:\n    cluster: %s\n    user: %s\n", name, name)
 
 		if ns != "" {
-			content.WriteString(fmt.Sprintf("    namespace: %s\n", ns))
+			fmt.Fprintf(&content, "    namespace: %s\n", ns)
 		}
 
-		content.WriteString(fmt.Sprintf("  name: %s\n", name))
+		fmt.Fprintf(&content, "  name: %s\n", name)
 	}
 
 	content.WriteString("users:\n")
 
 	for name := range contexts {
-		content.WriteString(fmt.Sprintf("- name: %s\n  user:\n    token: fake-token\n", name))
+		fmt.Fprintf(&content, "- name: %s\n  user:\n    token: fake-token\n", name)
 	}
 
 	if err := os.WriteFile(path, []byte(content.String()), 0600); err != nil {
