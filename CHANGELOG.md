@@ -1,3 +1,21 @@
+# [1.1.0](https://github.com/entwico/podproxy/compare/v1.0.0...v1.1.0) (2026-04-15)
+
+
+### Bug Fixes
+
+* **ci:** rename snapshot formula from podproxy@latest to podproxy-latest ([c596e8a](https://github.com/entwico/podproxy/commit/c596e8a7298a3e90f596d4ce118ebc28c3796331))
+* **ci:** use snapshot mode for docker build and pin golangci-lint v2.10.1 ([859d542](https://github.com/entwico/podproxy/commit/859d5423694793a741b0730cc4092cecd0715ca7))
+* **lint:** suppress gosec G704 SSRF warnings in test files ([9cde558](https://github.com/entwico/podproxy/commit/9cde558a0a18f932c0a94c320530335a39fb2347))
+
+
+### Features
+
+* add node integration ([c1c796b](https://github.com/entwico/podproxy/commit/c1c796baf32d10d3a6875b0eec5961b826250341))
+* **brew:** add brew services support and default config installation ([162c982](https://github.com/entwico/podproxy/commit/162c9826b26a731680a2fd117a33d079a114cd2c))
+* **ci:** add GHCR Docker image build to CI and release workflows ([75b8fe6](https://github.com/entwico/podproxy/commit/75b8fe68a5340986598ffa80529d6b3d8f41350b))
+* **ci:** add Homebrew tap distribution via GoReleaser ([717d284](https://github.com/entwico/podproxy/commit/717d284383ff7481678ba5307b3d85ecf6a7c2f3))
+* **config:** add multi-phase kubeconfig discovery and separate resolved clusters ([95cab67](https://github.com/entwico/podproxy/commit/95cab6719664c96e63cdc7e5b2cfdc79fcdfc17b))
+
 # 1.0.0 (2026-02-17)
 
 
