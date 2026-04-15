@@ -18,7 +18,7 @@ func Install(destDir string) error {
 
 	dest := filepath.Join(destDir, "proxy.mjs")
 
-	if err := os.WriteFile(dest, proxyScript, 0o644); err != nil {
+	if err := os.WriteFile(dest, proxyScript, 0o600); err != nil {
 		return fmt.Errorf("writing %s: %w", dest, err)
 	}
 
