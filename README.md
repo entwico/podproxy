@@ -54,7 +54,9 @@ cmd/podproxy/          Entry point
 internal/
   config/              Configuration loading, defaults, and logger setup
   kube/                Kubernetes client, port-forward dialer, and service-to-pod resolver
+  nodeproxy/           Embedded Node.js proxy script (go:embed)
   proxy/               HTTP CONNECT proxy, SOCKS5 handler, and PAC file server
+integrations/node/     Node.js proxy integration (TypeScript source, esbuild)
 install/               macOS launchd install/uninstall scripts and plist template
 ```
 
@@ -217,6 +219,39 @@ export https_proxy=http://127.0.0.1:8080
 curl http://my-api.staging:8080/health   # routed via Kubernetes
 curl https://github.com                   # passthrough (direct)
 ```
+
+## Node.js integration
+
+Node.js ignores system proxy settings — `dns`, `net`, and `http2` bypass OS-level proxy configuration entirely. podproxy ships a bundled script that patches Node's `dns` and `net` modules to route matched connections through the SOCKS5 proxy.
+
+### Setup
+
+```sh
+podproxy init
+```
+
+This extracts `proxy.mjs` to `~/.podproxy/node/` and prints the `NODE_OPTIONS` line to add to your shell config or `.envrc`:
+
+```sh
+export NODE_OPTIONS="--import ~/.podproxy/node/proxy.mjs"
+```
+
+Once set, all Node.js processes will automatically route Kubernetes traffic through podproxy. When podproxy isn't running, the PAC fetch fails gracefully and no traffic is proxied.
+
+### How it works
+
+1. On startup, fetches the PAC file from podproxy (`http://127.0.0.1:9082`) to discover which domains to proxy
+2. Patches `dns.lookup` / `dns.resolve*` to return fake IPs (from the 192.0.2.0/24 TEST-NET-1 range) for matched hostnames
+3. Patches `net.connect` to intercept connections to those fake IPs and route them through SOCKS5
+
+### Configuration
+
+| Environment variable | Default | Description |
+|---|---|---|
+| `DEV_SOCKS_PROXY` | `socks5://127.0.0.1:9080` | SOCKS5 proxy URL |
+| `DEV_PROXY_PAC_URL` | `http://127.0.0.1:9082` | PAC endpoint for auto-discovering domains |
+| `DEV_PROXY_MATCH` | | Additional regex pattern for hostnames to proxy |
+| `DEV_PROXY_LOG` | `error` | Log level: `error`, `info`, `debug` |
 
 ## Running as a macOS LaunchAgent
 

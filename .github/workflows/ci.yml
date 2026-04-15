@@ -17,6 +17,19 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: integrations/node/pnpm-lock.yaml
+
+      - name: Build node proxy
+        run: cd integrations/node && pnpm install --frozen-lockfile && node build.mjs && cp dist/proxy.mjs ../../internal/nodeproxy/embed/proxy.mjs
+        env:
+          NODE_OPTIONS: ""
+
       - uses: actions/setup-go@v5
         with:
           go-version: '1.26.0'
@@ -30,6 +43,19 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: integrations/node/pnpm-lock.yaml
+
+      - name: Build node proxy
+        run: cd integrations/node && pnpm install --frozen-lockfile && node build.mjs && cp dist/proxy.mjs ../../internal/nodeproxy/embed/proxy.mjs
+        env:
+          NODE_OPTIONS: ""
 
       - uses: actions/setup-go@v5
         with:
@@ -53,6 +79,19 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: integrations/node/pnpm-lock.yaml
+
+      - name: Build node proxy
+        run: cd integrations/node && pnpm install --frozen-lockfile && node build.mjs && cp dist/proxy.mjs ../../internal/nodeproxy/embed/proxy.mjs
+        env:
+          NODE_OPTIONS: ""
 
       - uses: actions/setup-go@v5
         with:
@@ -191,6 +230,19 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: integrations/node/pnpm-lock.yaml
+
+      - name: Build node proxy
+        run: cd integrations/node && pnpm install --frozen-lockfile && node build.mjs && cp dist/proxy.mjs ../../internal/nodeproxy/embed/proxy.mjs
+        env:
+          NODE_OPTIONS: ""
 
       - uses: actions/setup-go@v5
         with:

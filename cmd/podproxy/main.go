@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"syscall"
 	"time"
 
@@ -16,11 +17,17 @@ import (
 
 	"github.com/entwico/podproxy/internal/config"
 	"github.com/entwico/podproxy/internal/kube"
+	"github.com/entwico/podproxy/internal/nodeproxy"
 	"github.com/entwico/podproxy/internal/proxy"
 	"github.com/entwico/podproxy/internal/version"
 )
 
 func main() {
+	if len(os.Args) > 1 && os.Args[1] == "init" {
+		runInit()
+		return
+	}
+
 	showVersion := pflag.Bool("version", false, "print version information and exit")
 	configPath := pflag.String("config", "", "path to YAML config file (default: config.yaml in working directory)")
 
@@ -170,4 +177,28 @@ func clusterNames(clusters []config.ResolvedCluster) []string {
 	}
 
 	return names
+}
+
+func runInit() {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error: cannot determine home directory: %v\n", err)
+		os.Exit(1)
+	}
+
+	destDir := filepath.Join(home, ".podproxy", "node")
+
+	if err := nodeproxy.Install(destDir); err != nil {
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		os.Exit(1)
+	}
+
+	proxyPath := filepath.Join(destDir, "proxy.mjs")
+	fmt.Printf("installed %s\n\n", proxyPath)
+	fmt.Println("to enable Node.js proxy integration, use one of:")
+	fmt.Println()
+	fmt.Printf("  env var:  export NODE_OPTIONS=\"--import %s\"\n", proxyPath)
+	fmt.Printf("  cli flag: node --import %s your-script.js\n", proxyPath)
+	fmt.Println()
+	fmt.Println("or add the env var to your .envrc, or globally to your shell config of choice.")
 }

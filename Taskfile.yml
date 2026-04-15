@@ -12,7 +12,17 @@ tasks:
   build:
     cmds:
       - task: clean
+      - task: node:build
       - goreleaser build --clean --snapshot
+
+  node:build:
+    dir: integrations/node
+    env:
+      NODE_OPTIONS: ""
+    cmds:
+      - pnpm install --frozen-lockfile
+      - node build.mjs
+      - cp dist/proxy.mjs ../../internal/nodeproxy/embed/proxy.mjs
 
   clean:
     cmds:
@@ -21,11 +31,13 @@ tasks:
   test:
     cmds:
       - task: clean
+      - task: node:build
       - mkdir -p {{.BUILD_DIR}}
       - go test -v -race -coverprofile=./{{.BUILD_DIR}}/coverage.out ./...
       - go tool cover -html=./{{.BUILD_DIR}}/coverage.out -o ./{{.BUILD_DIR}}/coverage.html
 
   lint:
     cmds:
+      - task: node:build
       - golangci-lint version
       - golangci-lint run
