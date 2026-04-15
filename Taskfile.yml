@@ -22,6 +22,7 @@ tasks:
     cmds:
       - pnpm install --frozen-lockfile
       - node build.mjs
+      - mkdir -p ../../internal/nodeproxy/embed
       - cp dist/proxy.mjs ../../internal/nodeproxy/embed/proxy.mjs
 
   clean:

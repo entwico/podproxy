@@ -29,7 +29,7 @@ jobs:
           cache-dependency-path: integrations/node/pnpm-lock.yaml
 
       - name: Build node proxy
-        run: cd integrations/node && pnpm install --frozen-lockfile && node build.mjs && cp dist/proxy.mjs ../../internal/nodeproxy/embed/proxy.mjs
+        run: cd integrations/node && pnpm install --frozen-lockfile && node build.mjs && mkdir -p ../../internal/nodeproxy/embed && cp dist/proxy.mjs ../../internal/nodeproxy/embed/proxy.mjs
         env:
           NODE_OPTIONS: ""
 
@@ -65,7 +65,7 @@ jobs:
           cache-dependency-path: integrations/node/pnpm-lock.yaml
 
       - name: Build node proxy
-        run: cd integrations/node && pnpm install --frozen-lockfile && node build.mjs && cp dist/proxy.mjs ../../internal/nodeproxy/embed/proxy.mjs
+        run: cd integrations/node && pnpm install --frozen-lockfile && node build.mjs && mkdir -p ../../internal/nodeproxy/embed && cp dist/proxy.mjs ../../internal/nodeproxy/embed/proxy.mjs
         env:
           NODE_OPTIONS: ""
 
