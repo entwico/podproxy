@@ -40,7 +40,14 @@ export function patchNet({ shouldProxy, fakeIpToHostname, proxy, logger }: Patch
       },
     });
 
+    // grpc-js and other libraries expect net.Socket methods on the connection
     (wrapper as any).connecting = true;
+    (wrapper as any).setNoDelay = (noDelay?: boolean) => { socksSocketRef?.setNoDelay(noDelay); return wrapper; };
+    (wrapper as any).setKeepAlive = (enable?: boolean, delay?: number) => { socksSocketRef?.setKeepAlive(enable, delay); return wrapper; };
+    (wrapper as any).ref = () => { socksSocketRef?.ref(); return wrapper; };
+    (wrapper as any).unref = () => { socksSocketRef?.unref(); return wrapper; };
+    (wrapper as any).remoteAddress = host;
+    (wrapper as any).remotePort = port;
 
     SocksClient.createConnection({
       proxy: { host: proxy.host, port: proxy.port, type: proxy.type as 4 | 5 },

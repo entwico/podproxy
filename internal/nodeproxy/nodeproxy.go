@@ -8,18 +8,26 @@ import (
 )
 
 //go:embed embed/proxy.mjs
-var proxyScript []byte
+var proxyESM []byte
 
-// Install writes the bundled proxy.mjs to the given directory.
+//go:embed embed/proxy.cjs
+var proxyCJS []byte
+
+// Install writes the bundled proxy.mjs and proxy.cjs to the given directory.
 func Install(destDir string) error {
 	if err := os.MkdirAll(destDir, 0o755); err != nil {
 		return fmt.Errorf("creating directory %s: %w", destDir, err)
 	}
 
-	dest := filepath.Join(destDir, "proxy.mjs")
+	for name, data := range map[string][]byte{
+		"proxy.mjs": proxyESM,
+		"proxy.cjs": proxyCJS,
+	} {
+		dest := filepath.Join(destDir, name)
 
-	if err := os.WriteFile(dest, proxyScript, 0o600); err != nil {
-		return fmt.Errorf("writing %s: %w", dest, err)
+		if err := os.WriteFile(dest, data, 0o600); err != nil {
+			return fmt.Errorf("writing %s: %w", dest, err)
+		}
 	}
 
 	return nil

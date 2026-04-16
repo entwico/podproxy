@@ -193,12 +193,14 @@ func runInit() {
 		os.Exit(1)
 	}
 
-	proxyPath := filepath.Join(destDir, "proxy.mjs")
-	fmt.Printf("installed %s\n\n", proxyPath)
+	fmt.Printf("installed to %s\n\n", destDir)
 	fmt.Println("to enable Node.js proxy integration, use one of:")
 	fmt.Println()
-	fmt.Printf("  env var:  export NODE_OPTIONS=\"--import %s\"\n", proxyPath)
-	fmt.Printf("  cli flag: node --import %s your-script.js\n", proxyPath)
+	fmt.Println("  ESM (modern Node.js):")
+	fmt.Printf("    export NODE_OPTIONS=\"--import %s\"\n", filepath.Join(destDir, "proxy.mjs"))
 	fmt.Println()
-	fmt.Println("or add the env var to your .envrc, or globally to your shell config of choice.")
+	fmt.Println("  CJS (legacy / non-ESM Node.js):")
+	fmt.Printf("    export NODE_OPTIONS=\"--require %s\"\n", filepath.Join(destDir, "proxy.cjs"))
+	fmt.Println()
+	fmt.Println("add the env var to your .envrc, or globally to your shell config of choice.")
 }

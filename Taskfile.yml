@@ -24,6 +24,7 @@ tasks:
       - node build.mjs
       - mkdir -p ../../internal/nodeproxy/embed
       - cp dist/proxy.mjs ../../internal/nodeproxy/embed/proxy.mjs
+      - cp dist/proxy.cjs ../../internal/nodeproxy/embed/proxy.cjs
 
   clean:
     cmds:

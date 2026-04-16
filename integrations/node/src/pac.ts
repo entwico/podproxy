@@ -1,3 +1,5 @@
+import { execFileSync } from 'child_process';
+
 import type { Logger } from './logger';
 
 export interface LoadPatternsOptions {
@@ -6,7 +8,28 @@ export interface LoadPatternsOptions {
   logger: Logger;
 }
 
-export async function loadPatterns({ match, pacUrl, logger }: LoadPatternsOptions): Promise<RegExp[]> {
+export function loadPatterns({ match, pacUrl, logger }: LoadPatternsOptions): RegExp[] {
+  const patterns: RegExp[] = [];
+
+  if (match) {
+    patterns.push(new RegExp(match));
+  }
+
+  if (pacUrl) {
+    try {
+      const pac = execFileSync('curl', ['-fsSL', '--max-time', '5', pacUrl], { encoding: 'utf-8' });
+      const parsed = parsePacPatterns(pac);
+      patterns.push(...parsed);
+      logger.debug(`loaded ${patterns.length} patterns from PAC`);
+    } catch (err) {
+      logger.error(`failed to load PAC from ${pacUrl}: ${(err as Error).message}`);
+    }
+  }
+
+  return patterns;
+}
+
+export async function loadPatternsAsync({ match, pacUrl, logger }: LoadPatternsOptions): Promise<RegExp[]> {
   const patterns: RegExp[] = [];
 
   if (match) {

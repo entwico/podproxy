@@ -5,3 +5,4 @@ dist/
 integrations/node/node_modules/
 integrations/node/dist/
 internal/nodeproxy/embed/proxy.mjs
+internal/nodeproxy/embed/proxy.cjs
