@@ -52,7 +52,7 @@ export function patchNet({ shouldProxy, fakeIpToHostname, proxy, logger }: Patch
     SocksClient.createConnection({
       proxy: { host: proxy.host, port: proxy.port, type: proxy.type as 4 | 5 },
       command: 'connect',
-      destination: { host: targetHost, port },
+      destination: { host: targetHost, port: Number(port) },
     })
       .then((info) => {
         socksSocketRef = info.socket;
