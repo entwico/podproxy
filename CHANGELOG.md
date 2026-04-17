@@ -1,3 +1,10 @@
+# [1.2.0](https://github.com/entwico/podproxy/compare/v1.1.0...v1.2.0) (2026-04-17)
+
+
+### Features
+
+* add cjs output for node integration ([3bb3f9e](https://github.com/entwico/podproxy/commit/3bb3f9ef4baad7806d59da06edb0b110eb2f68d8))
+
 # [1.1.0](https://github.com/entwico/podproxy/compare/v1.0.0...v1.1.0) (2026-04-15)
 
 
