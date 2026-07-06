@@ -202,6 +202,42 @@ func TestHTTPProxyForwardPOST(t *testing.T) {
 	}
 }
 
+func TestHTTPProxyRewritesHostToLoopback(t *testing.T) {
+	gotHost := make(chan string, 1)
+	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotHost <- r.Host
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer backend.Close()
+
+	proxy := &HTTPProxy{
+		DialContext: (&net.Dialer{}).DialContext,
+	}
+
+	proxyServer := httptest.NewServer(proxy)
+	defer proxyServer.Close()
+
+	proxyURL, _ := url.Parse(proxyServer.URL)
+	client := &http.Client{Transport: &http.Transport{Proxy: http.ProxyURL(proxyURL)}}
+
+	req, _ := http.NewRequestWithContext(context.Background(), http.MethodGet, backend.URL+"/x", nil)
+
+	resp, err := client.Do(req) //nolint:gosec // test uses controlled httptest URLs
+	if err != nil {
+		t.Fatalf("GET through proxy: %v", err)
+	}
+	defer resp.Body.Close()
+
+	// without the rewrite the upstream would see its own address (127.0.0.1:port)
+	// as Host; the rewrite normalizes it to localhost so localhost-guarded
+	// upstreams (e.g. the MCP go-sdk) accept the port-forwarded request.
+	backendURL, _ := url.Parse(backend.URL)
+	want := net.JoinHostPort("localhost", backendURL.Port())
+	if got := <-gotHost; got != want {
+		t.Errorf("forwarded Host = %q, want %q", got, want)
+	}
+}
+
 func TestHTTPProxyHopByHopHeaders(t *testing.T) {
 	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// verify hop-by-hop headers were stripped from the forwarded request
