@@ -131,6 +131,15 @@ func (p *HTTPProxy) handleHTTP(w http.ResponseWriter, r *http.Request) {
 	outReq.RequestURI = ""
 	removeHopByHopHeaders(outReq.Header)
 
+	// upstreams are reached through a Kubernetes port-forward, so from the pod's
+	// perspective every request arrives on its own loopback (127.0.0.1). Servers
+	// with localhost / DNS-rebinding protection (e.g. the MCP Streamable HTTP
+	// go-sdk) reject a loopback request that carries a non-localhost Host header.
+	// rewrite the forwarded Host to match the real TCP peer so those servers
+	// accept it; routing is unaffected because Transport keys the dial off
+	// outReq.URL.Host, not the Host header.
+	outReq.Host = loopbackHost(outReq.URL.Port())
+
 	resp, err := p.httpTransport().RoundTrip(outReq)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("forwarding request: %v", err), http.StatusBadGateway)
@@ -151,6 +160,17 @@ func (p *HTTPProxy) handleHTTP(w http.ResponseWriter, r *http.Request) {
 	if _, err := io.Copy(w, resp.Body); err != nil {
 		p.logError("copying response body", "error", err)
 	}
+}
+
+// loopbackHost returns a localhost Host header value, preserving the upstream
+// port when present, so a port-forwarded request's Host matches the loopback
+// peer the pod sees it originate from.
+func loopbackHost(port string) string {
+	if port == "" {
+		return "localhost"
+	}
+
+	return net.JoinHostPort("localhost", port)
 }
 
 func removeHopByHopHeaders(h http.Header) {
