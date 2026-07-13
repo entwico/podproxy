@@ -22,10 +22,14 @@ export function main(pacLoader: typeof loadPatterns | typeof loadPatternsAsync) 
 
     const url = new URL(proxyUrl);
 
+    if (url.protocol !== 'socks5:') {
+      console.error(`[dev-proxy] unsupported proxy protocol "${url.protocol}", only socks5 is supported`);
+      process.exit(1);
+    }
+
     const proxy = {
       host: url.hostname,
       port: parseInt(url.port, 10),
-      type: url.protocol === 'socks4:' ? 4 : 5,
     };
 
     const patterns = pacLoader({ match: process.env.DEV_PROXY_MATCH, pacUrl, logger });

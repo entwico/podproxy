@@ -40,6 +40,46 @@ jobs:
         with:
           version: v2.10.1
 
+  node-test:
+    name: Node Test (node ${{ matrix.node }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node: [24, 26]
+    services:
+      mongodb:
+        image: mongo:8
+        ports:
+          - 27017:27017
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          package_json_file: integrations/node/package.json
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: pnpm
+          cache-dependency-path: integrations/node/pnpm-lock.yaml
+
+      - name: Install dependencies
+        run: cd integrations/node && pnpm install --frozen-lockfile
+        env:
+          NODE_OPTIONS: ""
+
+      - name: Typecheck
+        run: cd integrations/node && pnpm typecheck
+        env:
+          NODE_OPTIONS: ""
+
+      - name: Run tests
+        run: cd integrations/node && pnpm test
+        env:
+          NODE_OPTIONS: ""
+
   test:
     name: Test
     runs-on: ubuntu-latest
@@ -76,7 +116,7 @@ jobs:
 
   release-latest:
     name: Release Latest
-    needs: [lint, test]
+    needs: [lint, test, node-test]
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
     runs-on: ubuntu-latest
     steps:
@@ -229,7 +269,7 @@ jobs:
 
   docker:
     name: Docker
-    needs: [lint, test]
+    needs: [lint, test, node-test]
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
     runs-on: ubuntu-latest
     steps:

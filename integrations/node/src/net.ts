@@ -1,88 +1,350 @@
-import { Duplex } from 'stream';
+import fs from 'fs';
 import net from 'net';
-import { SocksClient } from 'socks';
 
+import {
+  SOCKS_VERSION,
+  SocksAddressType,
+  SocksMethod,
+  SocksReply,
+  encodeConnectRequest,
+  encodeGreeting,
+  replyMessage,
+} from './socks5';
 import type { Logger } from './logger';
 
 export interface PatchNetOptions {
   shouldProxy: (host: string) => boolean;
   fakeIpToHostname: Map<string, string>;
-  proxy: { host: string; port: number; type: number };
+  proxy: { host: string; port: number };
   logger: Logger;
 }
+
+const HANDSHAKE_TIMEOUT_MS = 10_000;
 
 export function patchNet({ shouldProxy, fakeIpToHostname, proxy, logger }: PatchNetOptions): void {
   const originalConnect = net.connect.bind(net);
 
-  function createProxiedConnection(host: string, port: number, callback?: () => void): Duplex {
+  // returns a real net.Socket and runs the SOCKS5 handshake on it before revealing
+  // it as connected. it must be a real socket (node wraps custom Duplexes in a
+  // JSStreamSocket for http2/tls, losing ref/unref and racing teardown), and no byte
+  // past the SOCKS reply may enter the JS buffer (http2 reads the native handle only)
+  function createProxiedConnection(host: string, port: number, options: any, callback?: () => void): net.Socket {
     const originalHostname = fakeIpToHostname.get(host);
     const targetHost = originalHostname ?? host;
 
-    if (!originalHostname && !shouldProxy(host)) {
-      return originalConnect({ host, port }, callback);
-    }
-
     logger.info(`${targetHost}:${port}`);
 
-    let socksSocketRef: net.Socket | null = null;
-    let pendingWrites: { chunk: any; encoding: BufferEncoding; cb: (error?: Error | null) => void }[] = [];
+    const socket = new net.Socket({ allowHalfOpen: Boolean(options.allowHalfOpen) });
 
-    const wrapper = new Duplex({
-      read() {
-        // data is pushed from socksSocket 'data' event below
-      },
-      write(chunk, encoding, cb) {
-        if (socksSocketRef) {
-          socksSocketRef.write(chunk, encoding, cb);
-        } else {
-          pendingWrites.push({ chunk, encoding, cb });
+    let phase: 'setup' | 'open' | 'failed' = 'setup';
+    let aborted = false;
+    let closedDuringSetup = false;
+    let queuedWrites: { chunk: any; encoding: BufferEncoding | undefined; cb: ((error?: Error | null) => void) | undefined }[] = [];
+    let queuedEnd: { chunk: any; encoding: BufferEncoding | undefined; cb: (() => void) | undefined } | null = null;
+    const deferredListeners: { method: 'on' | 'once'; event: string; listener: (...args: any[]) => void }[] = [];
+
+    const realWrite = socket.write.bind(socket);
+    const realEmit = socket.emit.bind(socket);
+    const realDestroy = socket.destroy.bind(socket);
+    const realOn = socket.on.bind(socket);
+    const realOnce = socket.once.bind(socket);
+    const realRemoveListener = socket.removeListener.bind(socket);
+
+    // never read during setup: bytes stay in the kernel until the consumer takes over
+    socket.pause();
+
+    if (options.noDelay) {
+      socket.setNoDelay(true);
+    }
+
+    if (options.keepAlive) {
+      socket.setKeepAlive(true, options.keepAliveInitialDelay ?? 0);
+    }
+
+    if (options.timeout) {
+      socket.setTimeout(options.timeout);
+    }
+
+    // connect() resets this.write to the prototype, so it must run before the overrides
+    socket.connect({ host: proxy.host, port: proxy.port });
+
+    const restore = () => {
+      delete (socket as any).emit;
+      delete (socket as any).write;
+      delete (socket as any).end;
+      delete (socket as any).destroy;
+      delete (socket as any).on;
+      delete (socket as any).once;
+      delete (socket as any).addListener;
+      delete (socket as any).removeListener;
+      delete (socket as any).off;
+    };
+
+    const fail = (err: Error) => {
+      if (phase !== 'setup' || aborted) {
+        return;
+      }
+
+      phase = 'failed';
+      restore();
+      logger.error(`SOCKS error for ${targetHost}:${port}: ${err.message}`);
+
+      if (socket.destroyed) {
+        realEmit('error', err);
+
+        if (closedDuringSetup) {
+          realEmit('close', true);
         }
-      },
-    });
+      } else {
+        realDestroy(err);
+      }
+    };
 
-    // grpc-js and other libraries expect net.Socket methods on the connection
-    (wrapper as any).connecting = true;
-    (wrapper as any).setNoDelay = (noDelay?: boolean) => { socksSocketRef?.setNoDelay(noDelay); return wrapper; };
-    (wrapper as any).setKeepAlive = (enable?: boolean, delay?: number) => { socksSocketRef?.setKeepAlive(enable, delay); return wrapper; };
-    (wrapper as any).ref = () => { socksSocketRef?.ref(); return wrapper; };
-    (wrapper as any).unref = () => { socksSocketRef?.unref(); return wrapper; };
-    (wrapper as any).remoteAddress = host;
-    (wrapper as any).remotePort = port;
+    // hold 'connect'/'ready' back until the handshake is done; 'data'/'end'
+    // cannot fire during setup because the socket never reads
+    (socket as any).emit = (event: string, ...args: any[]): boolean => {
+      if (phase === 'setup' && !aborted) {
+        switch (event) {
+          case 'connect':
+            establish();
 
-    SocksClient.createConnection({
-      proxy: { host: proxy.host, port: proxy.port, type: proxy.type as 4 | 5 },
-      command: 'connect',
-      destination: { host: targetHost, port: Number(port) },
-    })
-      .then((info) => {
-        socksSocketRef = info.socket;
-        socksSocketRef.removeAllListeners();
+            return false;
+          case 'ready':
+            return false;
+          case 'close':
+            closedDuringSetup = true;
+            fail(new Error('connection closed during setup'));
 
-        socksSocketRef.on('data', (data) => wrapper.push(data));
-        socksSocketRef.on('end', () => wrapper.push(null));
-        socksSocketRef.on('error', (err) => wrapper.destroy(err));
-        socksSocketRef.on('close', () => { if (!wrapper.destroyed) wrapper.destroy(); });
+            return false;
+          case 'error':
+            fail(args[0]);
 
-        // flush writes that arrived before SOCKS connection was ready
-        for (const { chunk, encoding, cb } of pendingWrites) {
-          socksSocketRef.write(chunk, encoding, cb);
+            return false;
+        }
+      }
+
+      return realEmit(event, ...args);
+    };
+
+    (socket as any).write = (chunk: any, encoding?: any, cb?: any): boolean => {
+      if (typeof encoding === 'function') {
+        cb = encoding;
+        encoding = undefined;
+      }
+
+      if (phase === 'setup') {
+        queuedWrites.push({ chunk, encoding, cb });
+
+        return false;
+      }
+
+      return realWrite(chunk, encoding, cb);
+    };
+
+    (socket as any).end = (chunk?: any, encoding?: any, cb?: any): net.Socket => {
+      if (typeof chunk === 'function') {
+        cb = chunk;
+        chunk = undefined;
+      } else if (typeof encoding === 'function') {
+        cb = encoding;
+        encoding = undefined;
+      }
+
+      if (phase === 'setup') {
+        queuedEnd = { chunk, encoding, cb };
+
+        return socket;
+      }
+
+      return (net.Socket.prototype.end as any).call(socket, chunk, encoding, cb);
+    };
+
+    (socket as any).destroy = (err?: Error): net.Socket => {
+      if (phase === 'setup') {
+        aborted = true;
+      }
+
+      return realDestroy(err);
+    };
+
+    // 'data'/'readable' listeners would start reads — attach them only once open
+    const deferOrAttach = (method: 'on' | 'once', attach: (event: string, listener: any) => net.Socket) => {
+      return (event: string, listener: any): net.Socket => {
+        if (phase === 'setup' && (event === 'data' || event === 'readable')) {
+          deferredListeners.push({ method, event, listener });
+
+          return socket;
         }
 
-        pendingWrites = [];
+        return attach(event, listener);
+      };
+    };
 
-        (wrapper as any).connecting = false;
-        wrapper.emit('connect');
+    (socket as any).on = deferOrAttach('on', realOn);
+    (socket as any).addListener = (socket as any).on;
+    (socket as any).once = deferOrAttach('once', realOnce);
+    (socket as any).removeListener = (event: string, listener: any): net.Socket => {
+      const index = deferredListeners.findIndex((entry) => entry.event === event && entry.listener === listener);
 
-        if (callback) {
-          callback();
+      if (index !== -1) {
+        deferredListeners.splice(index, 1);
+
+        return socket;
+      }
+
+      return realRemoveListener(event, listener);
+    };
+    (socket as any).off = (socket as any).removeListener;
+
+    // report the target instead of the proxy address
+    Object.defineProperty(socket, 'remoteAddress', { configurable: true, get: () => host });
+    Object.defineProperty(socket, 'remotePort', { configurable: true, get: () => port });
+
+    if (callback) {
+      realOnce('connect', callback);
+    }
+
+    // read exactly n bytes from the fd, polling on EAGAIN; anything beyond n stays in the kernel
+    const readExact = async (n: number): Promise<Buffer> => {
+      const out = Buffer.alloc(n);
+      const deadline = Date.now() + HANDSHAKE_TIMEOUT_MS;
+      let offset = 0;
+
+      while (offset < n) {
+        if (aborted || socket.destroyed) {
+          throw new Error('socket destroyed during SOCKS handshake');
         }
-      })
-      .catch((err) => {
-        logger.error(`SOCKS error for ${targetHost}:${port}: ${err.message}`);
-        wrapper.destroy(err);
-      });
 
-    return wrapper;
+        const fd = (socket as any)._handle?.fd;
+
+        if (typeof fd !== 'number' || fd < 0) {
+          throw new Error('socket handle unavailable during SOCKS handshake');
+        }
+
+        let bytesRead: number;
+
+        try {
+          bytesRead = fs.readSync(fd, out, offset, n - offset, null);
+        } catch (err: any) {
+          if (err.code === 'EAGAIN' || err.code === 'EWOULDBLOCK') {
+            if (Date.now() > deadline) {
+              throw new Error('SOCKS handshake timed out');
+            }
+
+            await new Promise((resolve) => setTimeout(resolve, 1));
+
+            continue;
+          }
+
+          throw err;
+        }
+
+        if (bytesRead === 0) {
+          throw new Error('connection closed during SOCKS handshake');
+        }
+
+        offset += bytesRead;
+      }
+
+      return out;
+    };
+
+    const handshake = async (): Promise<void> => {
+      realWrite(encodeGreeting());
+
+      const method = await readExact(2);
+
+      if (method[0] !== SOCKS_VERSION || method[1] !== SocksMethod.NoAuth) {
+        throw new Error('SOCKS5 proxy requires authentication or sent an invalid method reply');
+      }
+
+      realWrite(encodeConnectRequest(targetHost, Number(port)));
+
+      const reply = await readExact(4);
+
+      if (reply[0] !== SOCKS_VERSION) {
+        throw new Error('invalid SOCKS5 reply');
+      }
+
+      if (reply[1] !== SocksReply.Succeeded) {
+        throw new Error(`SOCKS5 connect failed: ${replyMessage(reply[1])}`);
+      }
+
+      // skip the bound address, exact length per address type
+      switch (reply[3]) {
+        case SocksAddressType.IPv4:
+          await readExact(4 + 2);
+          break;
+        case SocksAddressType.Domain: {
+          const length = await readExact(1);
+
+          await readExact(length[0] + 2);
+          break;
+        }
+        case SocksAddressType.IPv6:
+          await readExact(16 + 2);
+          break;
+        default:
+          throw new Error('invalid SOCKS5 reply address type');
+      }
+    };
+
+    const establish = () => {
+      handshake()
+        .then(() => {
+          if (phase !== 'setup' || aborted || socket.destroyed) {
+            return;
+          }
+
+          // reset flow state so the socket hands over like a fresh net.Socket;
+          // reading may be stuck true from a consumer read() issued while connecting
+          (socket as any)._readableState.flowing = null;
+          (socket as any)._readableState.reading = false;
+
+          phase = 'open';
+          restore();
+
+          for (const { method, event, listener } of deferredListeners) {
+            socket[method](event as any, listener);
+          }
+
+          deferredListeners.length = 0;
+
+          const writes = queuedWrites;
+
+          queuedWrites = [];
+
+          for (const { chunk, encoding, cb } of writes) {
+            socket.write(chunk, encoding as any, cb);
+          }
+
+          if (queuedEnd) {
+            (socket.end as any)(queuedEnd.chunk, queuedEnd.encoding, queuedEnd.cb);
+            queuedEnd = null;
+          }
+
+          // the handle never started reading (the handshake used the fd) — start it
+          // before 'connect' so native consumers like http2 do not miss bytes
+          const handle = (socket as any)._handle;
+
+          if (handle && !handle.reading) {
+            handle.reading = true;
+            handle.readStart();
+          }
+
+          socket.emit('connect');
+          socket.emit('ready');
+
+          if (writes.length > 0) {
+            socket.emit('drain');
+          }
+        })
+        .catch((err) => {
+          fail(err);
+        });
+    };
+
+    return socket;
   }
 
   function patchedConnect(...args: any[]): any {
@@ -110,7 +372,7 @@ export function patchNet({ shouldProxy, fakeIpToHostname, proxy, logger }: Patch
     const originalHostname = fakeIpToHostname.get(host);
 
     if (originalHostname || shouldProxy(host)) {
-      return createProxiedConnection(host, port, callback);
+      return createProxiedConnection(host, port, options, callback);
     }
 
     return originalConnect(options, callback);

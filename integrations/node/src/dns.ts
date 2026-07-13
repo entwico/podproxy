@@ -35,7 +35,11 @@ function patchLookup(shouldProxy: (host: string) => boolean, getFakeIp: (hostnam
       logger.debug(`dns.lookup ${hostname} → ${fakeIp}`);
 
       if (callback) {
-        process.nextTick(() => callback(null, fakeIp, 4));
+        if (options && options.all) {
+          process.nextTick(() => callback(null, [{ address: fakeIp, family: 4 }]));
+        } else {
+          process.nextTick(() => callback(null, fakeIp, 4));
+        }
       }
 
       return;

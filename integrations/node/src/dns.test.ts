@@ -68,6 +68,11 @@ describe('patchDns', () => {
       expect(address).toBe(getFakeIp('api.proxied.dev'));
       expect(family).toBe(4);
     });
+
+    it('returns address array when all option is set', async () => {
+      const [addresses] = await callbackToPromise<any>((cb) => dns.lookup('api.proxied.dev', { all: true }, cb));
+      expect(addresses).toEqual([{ address: getFakeIp('api.proxied.dev'), family: 4 }]);
+    });
   });
 
   describe('dns.promises.lookup', () => {
