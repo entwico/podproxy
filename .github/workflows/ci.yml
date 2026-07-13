@@ -145,7 +145,7 @@ jobs:
 
       - uses: goreleaser/goreleaser-action@v6
         with:
-          version: "~> v2"
+          version: v2.13.3
           args: release --snapshot --clean
 
       - name: Update latest release
@@ -298,7 +298,7 @@ jobs:
 
       - uses: goreleaser/goreleaser-action@v6
         with:
-          version: "~> v2"
+          version: v2.13.3
           args: build --snapshot --clean
 
       - name: Copy binaries for Docker build
