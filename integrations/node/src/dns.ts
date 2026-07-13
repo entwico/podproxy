@@ -1,10 +1,14 @@
-import dns from 'dns';
+/* eslint-disable unicorn/no-this-outside-of-class -- prototype monkey-patches forward the caller's receiver */
+import dns from 'node:dns';
 
 import type { Logger } from './logger';
 
+type ShouldProxy = (host: string) => boolean;
+type GetFakeIp = (hostname: string) => string;
+
 export interface PatchDnsOptions {
-  shouldProxy: (host: string) => boolean;
-  getFakeIp: (hostname: string) => string;
+  shouldProxy: ShouldProxy;
+  getFakeIp: GetFakeIp;
   logger: Logger;
 }
 
@@ -21,7 +25,7 @@ export function patchDns({ shouldProxy, getFakeIp, logger }: PatchDnsOptions): v
   patchPromisesResolverPrototype(shouldProxy, getFakeIp);
 }
 
-function patchLookup(shouldProxy: (host: string) => boolean, getFakeIp: (hostname: string) => string, logger: Logger): void {
+function patchLookup(shouldProxy: ShouldProxy, getFakeIp: GetFakeIp, logger: Logger): void {
   const original = dns.lookup.bind(dns);
 
   dns.lookup = function (hostname: string, options: any, callback?: any) {
@@ -36,9 +40,9 @@ function patchLookup(shouldProxy: (host: string) => boolean, getFakeIp: (hostnam
 
       if (callback) {
         if (options && options.all) {
-          process.nextTick(() => callback(null, [{ address: fakeIp, family: 4 }]));
+          queueMicrotask(() => callback(null, [{ address: fakeIp, family: 4 }]));
         } else {
-          process.nextTick(() => callback(null, fakeIp, 4));
+          queueMicrotask(() => callback(null, fakeIp, 4));
         }
       }
 
@@ -49,7 +53,7 @@ function patchLookup(shouldProxy: (host: string) => boolean, getFakeIp: (hostnam
   } as typeof dns.lookup;
 }
 
-function patchPromisesLookup(shouldProxy: (host: string) => boolean, getFakeIp: (hostname: string) => string, logger: Logger): void {
+function patchPromisesLookup(shouldProxy: ShouldProxy, getFakeIp: GetFakeIp, logger: Logger): void {
   const original = dns.promises.lookup.bind(dns.promises);
 
   dns.promises.lookup = async function (hostname: string, options?: any) {
@@ -68,7 +72,7 @@ function patchPromisesLookup(shouldProxy: (host: string) => boolean, getFakeIp: 
   } as typeof dns.promises.lookup;
 }
 
-function patchResolve4(shouldProxy: (host: string) => boolean, getFakeIp: (hostname: string) => string, logger: Logger): void {
+function patchResolve4(shouldProxy: ShouldProxy, getFakeIp: GetFakeIp, logger: Logger): void {
   const original = dns.resolve4.bind(dns);
 
   dns.resolve4 = function (hostname: string, options: any, callback?: any) {
@@ -82,7 +86,7 @@ function patchResolve4(shouldProxy: (host: string) => boolean, getFakeIp: (hostn
       logger.debug(`dns.resolve4 ${hostname} → ${fakeIp}`);
 
       if (callback) {
-        process.nextTick(() => callback(null, [fakeIp]));
+        queueMicrotask(() => callback(null, [fakeIp]));
       }
 
       return;
@@ -92,7 +96,7 @@ function patchResolve4(shouldProxy: (host: string) => boolean, getFakeIp: (hostn
   } as typeof dns.resolve4;
 }
 
-function patchResolve6(shouldProxy: (host: string) => boolean): void {
+function patchResolve6(shouldProxy: ShouldProxy): void {
   const original = dns.resolve6.bind(dns);
 
   dns.resolve6 = function (hostname: string, options: any, callback?: any) {
@@ -103,7 +107,7 @@ function patchResolve6(shouldProxy: (host: string) => boolean): void {
 
     if (shouldProxy(hostname)) {
       if (callback) {
-        process.nextTick(() => callback(null, []));
+        queueMicrotask(() => callback(null, []));
       }
 
       return;
@@ -113,7 +117,7 @@ function patchResolve6(shouldProxy: (host: string) => boolean): void {
   } as typeof dns.resolve6;
 }
 
-function patchPromisesResolve4(shouldProxy: (host: string) => boolean, getFakeIp: (hostname: string) => string): void {
+function patchPromisesResolve4(shouldProxy: ShouldProxy, getFakeIp: GetFakeIp): void {
   const original = dns.promises.resolve4.bind(dns.promises);
 
   dns.promises.resolve4 = async function (hostname: string, _options?: any) {
@@ -125,7 +129,7 @@ function patchPromisesResolve4(shouldProxy: (host: string) => boolean, getFakeIp
   } as typeof dns.promises.resolve4;
 }
 
-function patchPromisesResolve6(shouldProxy: (host: string) => boolean): void {
+function patchPromisesResolve6(shouldProxy: ShouldProxy): void {
   const original = dns.promises.resolve6.bind(dns.promises);
 
   dns.promises.resolve6 = async function (hostname: string, _options?: any) {
@@ -137,13 +141,13 @@ function patchPromisesResolve6(shouldProxy: (host: string) => boolean): void {
   } as typeof dns.promises.resolve6;
 }
 
-function patchResolveSrv(shouldProxy: (host: string) => boolean): void {
+function patchResolveSrv(shouldProxy: ShouldProxy): void {
   const original = dns.resolveSrv.bind(dns);
 
   dns.resolveSrv = function (hostname: string, callback: any) {
     if (shouldProxy(hostname)) {
       if (callback) {
-        process.nextTick(() => callback(null, []));
+        queueMicrotask(() => callback(null, []));
       }
 
       return;
@@ -153,7 +157,7 @@ function patchResolveSrv(shouldProxy: (host: string) => boolean): void {
   } as typeof dns.resolveSrv;
 }
 
-function patchPromisesResolveSrv(shouldProxy: (host: string) => boolean): void {
+function patchPromisesResolveSrv(shouldProxy: ShouldProxy): void {
   const original = dns.promises.resolveSrv.bind(dns.promises);
 
   dns.promises.resolveSrv = async function (hostname: string) {
@@ -165,7 +169,7 @@ function patchPromisesResolveSrv(shouldProxy: (host: string) => boolean): void {
   } as typeof dns.promises.resolveSrv;
 }
 
-function patchResolverPrototype(shouldProxy: (host: string) => boolean, getFakeIp: (hostname: string) => string): void {
+function patchResolverPrototype(shouldProxy: ShouldProxy, getFakeIp: GetFakeIp): void {
   const originalResolve4 = dns.Resolver.prototype.resolve4;
   const originalResolve6 = dns.Resolver.prototype.resolve6;
 
@@ -179,7 +183,7 @@ function patchResolverPrototype(shouldProxy: (host: string) => boolean, getFakeI
       const fakeIp = getFakeIp(hostname);
 
       if (callback) {
-        process.nextTick(() => callback(null, [fakeIp]));
+        queueMicrotask(() => callback(null, [fakeIp]));
       }
 
       return;
@@ -196,7 +200,7 @@ function patchResolverPrototype(shouldProxy: (host: string) => boolean, getFakeI
 
     if (shouldProxy(hostname)) {
       if (callback) {
-        process.nextTick(() => callback(null, []));
+        queueMicrotask(() => callback(null, []));
       }
 
       return;
@@ -206,11 +210,15 @@ function patchResolverPrototype(shouldProxy: (host: string) => boolean, getFakeI
   } as typeof dns.Resolver.prototype.resolve6;
 }
 
-function patchPromisesResolverPrototype(shouldProxy: (host: string) => boolean, getFakeIp: (hostname: string) => string): void {
+function patchPromisesResolverPrototype(shouldProxy: ShouldProxy, getFakeIp: GetFakeIp): void {
   const originalResolve4 = dns.promises.Resolver.prototype.resolve4;
   const originalResolve6 = dns.promises.Resolver.prototype.resolve6;
 
-  dns.promises.Resolver.prototype.resolve4 = async function (this: dns.promises.Resolver, hostname: string, _options?: any) {
+  dns.promises.Resolver.prototype.resolve4 = async function (
+    this: dns.promises.Resolver,
+    hostname: string,
+    _options?: any,
+  ) {
     if (shouldProxy(hostname)) {
       return [getFakeIp(hostname)] as any;
     }
@@ -218,7 +226,11 @@ function patchPromisesResolverPrototype(shouldProxy: (host: string) => boolean, 
     return originalResolve4.call(this, hostname, _options);
   } as typeof dns.promises.Resolver.prototype.resolve4;
 
-  dns.promises.Resolver.prototype.resolve6 = async function (this: dns.promises.Resolver, hostname: string, _options?: any) {
+  dns.promises.Resolver.prototype.resolve6 = async function (
+    this: dns.promises.Resolver,
+    hostname: string,
+    _options?: any,
+  ) {
     if (shouldProxy(hostname)) {
       return [] as any;
     }

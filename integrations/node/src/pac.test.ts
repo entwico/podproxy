@@ -1,4 +1,4 @@
-import { execFileSync } from 'child_process';
+import { execFileSync } from 'node:child_process';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { createLogger } from './logger';
@@ -54,7 +54,7 @@ describe('parsePacPatterns', () => {
 
 describe('loadPatterns (sync)', () => {
   it('creates regex from match string', () => {
-    const patterns = loadPatterns({ match: '\\.example\\.com$', logger });
+    const patterns = loadPatterns({ match: String.raw`\.example\.com$`, logger });
 
     expect(patterns).toHaveLength(1);
     expect(patterns[0].test('api.example.com')).toBe(true);
@@ -68,7 +68,7 @@ describe('loadPatterns (sync)', () => {
 
     expect(patterns).toHaveLength(1);
     expect(patterns[0].test('svc.cluster.local')).toBe(true);
-    expect(mockedExecFileSync).toHaveBeenCalledWith('curl', ['-fsSL', '--max-time', '5', 'http://localhost:9082'], { encoding: 'utf-8' });
+    expect(mockedExecFileSync).toHaveBeenCalledWith('curl', ['-fsSL', '--max-time', '5', 'http://localhost:9082'], { encoding: 'utf8' });
   });
 
   it('handles curl error gracefully', () => {
@@ -88,7 +88,7 @@ describe('loadPatterns (sync)', () => {
 
 describe('loadPatternsAsync', () => {
   it('creates regex from match string', async () => {
-    const patterns = await loadPatternsAsync({ match: '\\.example\\.com$', logger });
+    const patterns = await loadPatternsAsync({ match: String.raw`\.example\.com$`, logger });
 
     expect(patterns).toHaveLength(1);
     expect(patterns[0].test('api.example.com')).toBe(true);
@@ -109,7 +109,7 @@ describe('loadPatternsAsync', () => {
     mockFetch('shExpMatch(host, "*.pac.dev")');
 
     const patterns = await loadPatternsAsync({
-      match: '\\.manual\\.dev$',
+      match: String.raw`\.manual\.dev$`,
       pacUrl: 'http://localhost:9082',
       logger,
     });

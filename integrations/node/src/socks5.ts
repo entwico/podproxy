@@ -93,7 +93,7 @@ export function decodeConnectRequest(request: Buffer): { host: string; port: num
 
   if (atyp === SocksAddressType.IPv4) {
     return {
-      host: Array.from(request.subarray(4, 8)).join('.'),
+      host: [...request.subarray(4, 8)].join('.'),
       port: request.readUInt16BE(8),
     };
   }

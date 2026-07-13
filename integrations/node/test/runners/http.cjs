@@ -7,7 +7,9 @@ async function main() {
     const req = http.get(`http://echo.podproxy-it.test:${port}/`, (res) => {
       const chunks = [];
 
-      res.on('data', (chunk) => chunks.push(chunk));
+      res.on('data', (chunk) => {
+        chunks.push(chunk);
+      });
       res.on('end', () => resolve(Buffer.concat(chunks).toString()));
       res.on('error', reject);
     });
@@ -23,7 +25,7 @@ async function main() {
   console.log('OK');
 }
 
-main().catch((err) => {
-  console.error(err);
+main().catch((error) => {
+  console.error(error);
   process.exit(1);
 });

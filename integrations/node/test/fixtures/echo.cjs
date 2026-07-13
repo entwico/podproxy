@@ -1,8 +1,8 @@
 // shared echo service definitions, used by the vitest host and the spawned client runners
 
 const { create, toBinary } = require('@bufbuild/protobuf');
-const { FileDescriptorProtoSchema } = require('@bufbuild/protobuf/wkt');
 const { fileDesc, serviceDesc } = require('@bufbuild/protobuf/codegenv2');
+const { FileDescriptorProtoSchema } = require('@bufbuild/protobuf/wkt');
 
 // runtime-built descriptor equivalent to:
 //   syntax = "proto3";
@@ -41,6 +41,7 @@ const fileDescriptorProto = create(FileDescriptorProtoSchema, {
   ],
 });
 
+// eslint-disable-next-line unicorn/prefer-uint8array-base64 -- toBase64() is unavailable on node 24, the oldest runtime this fixture must run on
 const file = fileDesc(Buffer.from(toBinary(FileDescriptorProtoSchema, fileDescriptorProto)).toString('base64'));
 
 exports.EchoService = serviceDesc(file, 0);
@@ -59,4 +60,4 @@ exports.jsonEchoDefinition = {
 };
 
 // response padding forces multi-frame responses so buffered readable data is exercised
-exports.RESPONSE_PADDING = 'x'.repeat(65536);
+exports.RESPONSE_PADDING = 'x'.repeat(65_536);

@@ -1,20 +1,27 @@
 {
   "private": true,
-  "packageManager": "pnpm@10.32.1",
+  "type": "module",
+  "packageManager": "pnpm@11.12.0",
   "scripts": {
     "build": "node build.mjs",
+    "lint": "eslint --cache",
+    "lint:fix": "pnpm lint --fix",
     "test": "vitest run",
-    "typecheck": "tsc"
+    "typecheck": "tsc",
+    "validate": "pnpm lint && pnpm typecheck && pnpm test"
   },
   "devDependencies": {
     "@bufbuild/protobuf": "^2.12.1",
     "@connectrpc/connect": "^2.1.2",
     "@connectrpc/connect-node": "^2.1.2",
+    "@entwico/eslint-config": "^2.0.7",
     "@grpc/grpc-js": "^1.14.4",
     "@types/node": "^22.15.17",
     "esbuild": "^0.25.4",
+    "eslint": "^10.0.0",
+    "globals": "^17.7.0",
     "mongodb": "^7.5.0",
-    "typescript": "^5.8.3",
+    "typescript": "^6.0.3",
     "vitest": "^3.2.1"
   }
 }

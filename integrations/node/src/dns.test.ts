@@ -1,8 +1,8 @@
-import dns from 'dns';
+import dns from 'node:dns';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-import { createLogger } from './logger';
 import { patchDns } from './dns';
+import { createLogger } from './logger';
 
 const logger = createLogger('error');
 

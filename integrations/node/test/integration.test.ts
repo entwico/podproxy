@@ -1,17 +1,17 @@
-import { execFile, execFileSync } from 'child_process';
-import { createRequire } from 'module';
-import fs from 'fs';
-import http from 'http';
-import http2 from 'http2';
-import net from 'net';
-import os from 'os';
-import path from 'path';
-import { fileURLToPath } from 'url';
-import * as grpc from '@grpc/grpc-js';
+import { execFile, execFileSync } from 'node:child_process';
+import fs from 'node:fs';
+import http from 'node:http';
+import http2 from 'node:http2';
+import { createRequire } from 'node:module';
+import net from 'node:net';
+import os from 'node:os';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { connectNodeAdapter } from '@connectrpc/connect-node';
+import * as grpc from '@grpc/grpc-js';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
-import { startSocksServer, type TestSocksServer } from './socks-server';
+import { type TestSocksServer, startSocksServer } from './socks-server';
 
 const require_ = createRequire(import.meta.url);
 const { EchoService, jsonEchoDefinition, RESPONSE_PADDING } = require_('./fixtures/echo.cjs');
@@ -41,7 +41,7 @@ function probe(port: number): Promise<boolean> {
 
 // an explicit MONGODB_TEST_PORT wins; otherwise 27017 (CI service container,
 // local mongod) and 48717 (docker-compose.yaml, started by test/global-setup.ts)
-const mongoCandidates = process.env.MONGODB_TEST_PORT ? [Number(process.env.MONGODB_TEST_PORT)] : [27017, 48717];
+const mongoCandidates = process.env.MONGODB_TEST_PORT ? [Number(process.env.MONGODB_TEST_PORT)] : [27_017, 48_717];
 
 let mongoPort = 0;
 
@@ -83,7 +83,7 @@ function discoverRuntimes(): NodeRuntime[] {
 
   return fs
     .readdirSync(versionsDir)
-    .sort()
+    .toSorted((a, b) => a.localeCompare(b))
     .map((dir) => {
       const cwd = path.join(versionsDir, dir);
 
@@ -138,13 +138,13 @@ function runClient(runtime: NodeRuntime, hookArgs: string[], runner: string, bac
         env: childEnv({
           DEV_SOCKS_PROXY: `socks5://127.0.0.1:${socks.port}`,
           DEV_PROXY_PAC_URL: '',
-          DEV_PROXY_MATCH: '\\.podproxy-it\\.test$',
+          DEV_PROXY_MATCH: String.raw`\.podproxy-it\.test$`,
           DEV_PROXY_LOG: 'info',
           PODPROXY_TEST_PORT: String(backendPort),
         }),
       },
       (error, stdout, stderr) => {
-        const code = error === null ? 0 : typeof error.code === 'number' ? error.code : 1;
+        const code = error === null ? 0 : (typeof error.code === 'number' ? error.code : 1);
         const timedOut = error !== null && error.killed === true;
 
         resolve({ code, output: `${timedOut ? '(child timed out)\n' : ''}${stdout}${stderr}` });

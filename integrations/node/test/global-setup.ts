@@ -1,7 +1,7 @@
-import { execFileSync } from 'child_process';
-import net from 'net';
-import path from 'path';
-import { fileURLToPath } from 'url';
+import { execFileSync } from 'node:child_process';
+import net from 'node:net';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 const nodeRoot = fileURLToPath(new URL('..', import.meta.url));
 
@@ -29,7 +29,7 @@ export default async function setup(): Promise<void> {
     return;
   }
 
-  if ((await reachable(27017)) || (await reachable(48717))) {
+  if ((await reachable(27_017)) || (await reachable(48_717))) {
     return;
   }
 

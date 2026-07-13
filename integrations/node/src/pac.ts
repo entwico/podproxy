@@ -1,4 +1,4 @@
-import { execFileSync } from 'child_process';
+import { execFileSync } from 'node:child_process';
 
 import type { Logger } from './logger';
 
@@ -17,12 +17,12 @@ export function loadPatterns({ match, pacUrl, logger }: LoadPatternsOptions): Re
 
   if (pacUrl) {
     try {
-      const pac = execFileSync('curl', ['-fsSL', '--max-time', '5', pacUrl], { encoding: 'utf-8' });
+      const pac = execFileSync('curl', ['-fsSL', '--max-time', '5', pacUrl], { encoding: 'utf8' });
       const parsed = parsePacPatterns(pac);
       patterns.push(...parsed);
       logger.debug(`loaded ${patterns.length} patterns from PAC`);
-    } catch (err) {
-      logger.error(`failed to load PAC from ${pacUrl}: ${(err as Error).message}`);
+    } catch (error) {
+      logger.error(`failed to load PAC from ${pacUrl}: ${(error as Error).message}`);
     }
   }
 
@@ -43,8 +43,8 @@ export async function loadPatternsAsync({ match, pacUrl, logger }: LoadPatternsO
       const parsed = parsePacPatterns(pac);
       patterns.push(...parsed);
       logger.debug(`loaded ${patterns.length} patterns from PAC`);
-    } catch (err) {
-      logger.error(`failed to load PAC from ${pacUrl}: ${(err as Error).message}`);
+    } catch (error) {
+      logger.error(`failed to load PAC from ${pacUrl}: ${(error as Error).message}`);
     }
   }
 
@@ -57,8 +57,8 @@ export function parsePacPatterns(pac: string): RegExp[] {
 
   for (const match of matches) {
     const domain = match[1].replace('*.', '');
-    const escaped = domain.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    patterns.push(new RegExp(`\\.${escaped}$`));
+    const escaped = domain.replaceAll(/[.*+?^${}()|[\]\\]/g, String.raw`\$&`);
+    patterns.push(new RegExp(String.raw`\.${escaped}$`));
   }
 
   return patterns;

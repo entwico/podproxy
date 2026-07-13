@@ -3,7 +3,7 @@ import { MongoClient } from 'mongodb';
 const port = process.env.PODPROXY_TEST_PORT;
 
 const client = new MongoClient(`mongodb://mongo.podproxy-it.test:${port}/?directConnection=true`, {
-  serverSelectionTimeoutMS: 10000,
+  serverSelectionTimeoutMS: 10_000,
 });
 
 await client.connect();

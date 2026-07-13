@@ -1,6 +1,7 @@
-import fs from 'fs';
-import net from 'net';
+import fs from 'node:fs';
+import net from 'node:net';
 
+import type { Logger } from './logger';
 import {
   SOCKS_VERSION,
   SocksAddressType,
@@ -10,7 +11,6 @@ import {
   encodeGreeting,
   replyMessage,
 } from './socks5';
-import type { Logger } from './logger';
 
 export interface PatchNetOptions {
   shouldProxy: (host: string) => boolean;
@@ -20,6 +20,12 @@ export interface PatchNetOptions {
 }
 
 const HANDSHAKE_TIMEOUT_MS = 10_000;
+
+interface QueuedWrite {
+  chunk: any;
+  encoding: BufferEncoding | undefined;
+  cb: ((error?: Error | null) => void) | undefined;
+}
 
 export function patchNet({ shouldProxy, fakeIpToHostname, proxy, logger }: PatchNetOptions): void {
   const originalConnect = net.connect.bind(net);
@@ -39,7 +45,7 @@ export function patchNet({ shouldProxy, fakeIpToHostname, proxy, logger }: Patch
     let phase: 'setup' | 'open' | 'failed' = 'setup';
     let aborted = false;
     let closedDuringSetup = false;
-    let queuedWrites: { chunk: any; encoding: BufferEncoding | undefined; cb: ((error?: Error | null) => void) | undefined }[] = [];
+    let queuedWrites: QueuedWrite[] = [];
     let queuedEnd: { chunk: any; encoding: BufferEncoding | undefined; cb: (() => void) | undefined } | null = null;
     const deferredListeners: { method: 'on' | 'once'; event: string; listener: (...args: any[]) => void }[] = [];
 
@@ -105,21 +111,25 @@ export function patchNet({ shouldProxy, fakeIpToHostname, proxy, logger }: Patch
     (socket as any).emit = (event: string, ...args: any[]): boolean => {
       if (phase === 'setup' && !aborted) {
         switch (event) {
-          case 'connect':
-            establish();
+          case 'connect': {
+            void establish();
 
             return false;
-          case 'ready':
+          }
+          case 'ready': {
             return false;
-          case 'close':
+          }
+          case 'close': {
             closedDuringSetup = true;
             fail(new Error('connection closed during setup'));
 
             return false;
-          case 'error':
+          }
+          case 'error': {
             fail(args[0]);
 
             return false;
+          }
         }
       }
 
@@ -197,8 +207,10 @@ export function patchNet({ shouldProxy, fakeIpToHostname, proxy, logger }: Patch
     (socket as any).off = (socket as any).removeListener;
 
     // report the target instead of the proxy address
-    Object.defineProperty(socket, 'remoteAddress', { configurable: true, get: () => host });
-    Object.defineProperty(socket, 'remotePort', { configurable: true, get: () => port });
+    Object.defineProperties(socket, {
+      remoteAddress: { configurable: true, get: () => host },
+      remotePort: { configurable: true, get: () => port },
+    });
 
     if (callback) {
       realOnce('connect', callback);
@@ -225,10 +237,10 @@ export function patchNet({ shouldProxy, fakeIpToHostname, proxy, logger }: Patch
 
         try {
           bytesRead = fs.readSync(fd, out, offset, n - offset, null);
-        } catch (err: any) {
-          if (err.code === 'EAGAIN' || err.code === 'EWOULDBLOCK') {
+        } catch (error: any) {
+          if (error.code === 'EAGAIN' || error.code === 'EWOULDBLOCK') {
             if (Date.now() > deadline) {
-              throw new Error('SOCKS handshake timed out');
+              throw new Error('SOCKS handshake timed out', { cause: error });
             }
 
             await new Promise((resolve) => setTimeout(resolve, 1));
@@ -236,7 +248,7 @@ export function patchNet({ shouldProxy, fakeIpToHostname, proxy, logger }: Patch
             continue;
           }
 
-          throw err;
+          throw error;
         }
 
         if (bytesRead === 0) {
@@ -258,7 +270,7 @@ export function patchNet({ shouldProxy, fakeIpToHostname, proxy, logger }: Patch
         throw new Error('SOCKS5 proxy requires authentication or sent an invalid method reply');
       }
 
-      realWrite(encodeConnectRequest(targetHost, Number(port)));
+      realWrite(encodeConnectRequest(targetHost, port));
 
       const reply = await readExact(4);
 
@@ -272,76 +284,79 @@ export function patchNet({ shouldProxy, fakeIpToHostname, proxy, logger }: Patch
 
       // skip the bound address, exact length per address type
       switch (reply[3]) {
-        case SocksAddressType.IPv4:
+        case SocksAddressType.IPv4: {
           await readExact(4 + 2);
           break;
+        }
         case SocksAddressType.Domain: {
           const length = await readExact(1);
 
           await readExact(length[0] + 2);
           break;
         }
-        case SocksAddressType.IPv6:
+        case SocksAddressType.IPv6: {
           await readExact(16 + 2);
           break;
-        default:
+        }
+        default: {
           throw new Error('invalid SOCKS5 reply address type');
+        }
       }
     };
 
-    const establish = () => {
-      handshake()
-        .then(() => {
-          if (phase !== 'setup' || aborted || socket.destroyed) {
-            return;
-          }
+    const establish = async () => {
+      try {
+        await handshake();
 
-          // reset flow state so the socket hands over like a fresh net.Socket;
-          // reading may be stuck true from a consumer read() issued while connecting
-          (socket as any)._readableState.flowing = null;
-          (socket as any)._readableState.reading = false;
+        if (phase !== 'setup' || aborted || socket.destroyed) {
+          return;
+        }
 
-          phase = 'open';
-          restore();
+        // reset flow state so the socket hands over like a fresh net.Socket;
+        // reading may be stuck true from a consumer read() issued while connecting
+        (socket as any)._readableState.flowing = null;
+        (socket as any)._readableState.reading = false;
 
-          for (const { method, event, listener } of deferredListeners) {
-            socket[method](event as any, listener);
-          }
+        phase = 'open';
+        restore();
 
-          deferredListeners.length = 0;
+        for (const { method, event, listener } of deferredListeners) {
+          socket[method](event as any, listener);
+        }
 
-          const writes = queuedWrites;
+        deferredListeners.length = 0;
 
-          queuedWrites = [];
+        const writes = queuedWrites;
 
-          for (const { chunk, encoding, cb } of writes) {
-            socket.write(chunk, encoding as any, cb);
-          }
+        queuedWrites = [];
 
-          if (queuedEnd) {
-            (socket.end as any)(queuedEnd.chunk, queuedEnd.encoding, queuedEnd.cb);
-            queuedEnd = null;
-          }
+        for (const { chunk, encoding, cb } of writes) {
+          socket.write(chunk, encoding as any, cb);
+        }
 
-          // the handle never started reading (the handshake used the fd) — start it
-          // before 'connect' so native consumers like http2 do not miss bytes
-          const handle = (socket as any)._handle;
+        if (queuedEnd) {
+          (socket.end as any)(queuedEnd.chunk, queuedEnd.encoding, queuedEnd.cb);
+          queuedEnd = null;
+        }
 
-          if (handle && !handle.reading) {
-            handle.reading = true;
-            handle.readStart();
-          }
+        // the handle never started reading (the handshake used the fd) — start it
+        // before 'connect' so native consumers like http2 do not miss bytes
+        const handle = (socket as any)._handle;
 
-          socket.emit('connect');
-          socket.emit('ready');
+        if (handle && !handle.reading) {
+          handle.reading = true;
+          handle.readStart();
+        }
 
-          if (writes.length > 0) {
-            socket.emit('drain');
-          }
-        })
-        .catch((err) => {
-          fail(err);
-        });
+        socket.emit('connect');
+        socket.emit('ready');
+
+        if (writes.length > 0) {
+          socket.emit('drain');
+        }
+      } catch (error) {
+        fail(error instanceof Error ? error : new Error(String(error)));
+      }
     };
 
     return socket;

@@ -1,7 +1,7 @@
-import net from 'net';
+import net from 'node:net';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { startSocksServer, type TestSocksServer } from '../test/socks-server';
+import { type TestSocksServer, startSocksServer } from '../test/socks-server';
 import { createLogger } from './logger';
 import { patchNet } from './net';
 
@@ -17,7 +17,9 @@ function collect(socket: net.Socket): Promise<Buffer> {
   return new Promise((resolve, reject) => {
     const chunks: Buffer[] = [];
 
-    socket.on('data', (chunk) => chunks.push(chunk));
+    socket.on('data', (chunk) => {
+      chunks.push(chunk);
+    });
     socket.on('end', () => resolve(Buffer.concat(chunks)));
     socket.on('error', reject);
   });
@@ -190,11 +192,7 @@ describe('patchNet', () => {
   it('delivers buffered data to paused-mode readers when the server closes immediately', async () => {
     const socket = net.connect({ host: 'svc.proxied.dev', port: burstPort });
 
-    const chunks: Buffer[] = [];
-
-    for await (const chunk of socket) {
-      chunks.push(chunk);
-    }
+    const chunks: Buffer[] = await Array.fromAsync(socket);
 
     expect(Buffer.concat(chunks).length).toBe(BIG_PAYLOAD.length);
   });

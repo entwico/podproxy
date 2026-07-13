@@ -3,6 +3,10 @@ output: "group"
 
 vars:
   BUILD_DIR: dist
+  GOLANGCI_LINT: github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.10.1
+  GORELEASER: github.com/goreleaser/goreleaser/v2@v2.13.3
+  GOLANGCI_LINT_CMD: '{{if .CI}}golangci-lint{{else}}go run {{.GOLANGCI_LINT}}{{end}}'
+  GORELEASER_CMD: '{{if .CI}}goreleaser{{else}}go run {{.GORELEASER}}{{end}}'
 
 tasks:
   default:
@@ -13,7 +17,7 @@ tasks:
     cmds:
       - task: clean
       - task: node:build
-      - goreleaser build --clean --snapshot
+      - '{{.GORELEASER_CMD}} build --clean --snapshot'
 
   node:build:
     dir: integrations/node
@@ -41,5 +45,5 @@ tasks:
   lint:
     cmds:
       - task: node:build
-      - golangci-lint version
-      - golangci-lint run
+      - '{{.GOLANGCI_LINT_CMD}} version'
+      - '{{.GOLANGCI_LINT_CMD}} run'

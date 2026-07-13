@@ -4,7 +4,7 @@ const port = process.env.PODPROXY_TEST_PORT;
 
 async function main() {
   const client = new MongoClient(`mongodb://mongo.podproxy-it.test:${port}/?directConnection=true`, {
-    serverSelectionTimeoutMS: 10000,
+    serverSelectionTimeoutMS: 10_000,
   });
 
   await client.connect();
@@ -34,7 +34,7 @@ async function main() {
   console.log('OK');
 }
 
-main().catch((err) => {
-  console.error(err);
+main().catch((error) => {
+  console.error(error);
   process.exit(1);
 });

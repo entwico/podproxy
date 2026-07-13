@@ -1,5 +1,5 @@
 import { createClient } from '@connectrpc/connect';
-import { createGrpcTransport, Http2SessionManager } from '@connectrpc/connect-node';
+import { Http2SessionManager, createGrpcTransport } from '@connectrpc/connect-node';
 import fixtures from '../fixtures/echo.cjs';
 
 const { EchoService, RESPONSE_PADDING } = fixtures;
