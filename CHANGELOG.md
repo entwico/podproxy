@@ -1,11 +1,25 @@
-# [1.2.0](https://github.com/entwico/podproxy/compare/v1.1.0...v1.2.0) (2026-04-17)
+# Changelog
+
+## v1.3.0 (2026-07-13)
+
+### Minor Changes
+
+- node integration: native SOCKS5 handshake on a real socket — http2, TLS, gRPC and MongoDB clients now proxy correctly
+
+### Patch Changes
+
+- HTTP proxy rewrites the forwarded Host header to loopback so servers with DNS-rebinding protection accept proxied requests
+- toolchain and dev tooling upgrades (Node 26, pnpm 11, TypeScript 6, ESLint, pinned Go/Node toolchains)
+- node integration: handle string port values when connecting
+
+## [1.2.0](https://github.com/entwico/podproxy/compare/v1.1.0...v1.2.0) (2026-04-17)
 
 
 ### Features
 
 * add cjs output for node integration ([3bb3f9e](https://github.com/entwico/podproxy/commit/3bb3f9ef4baad7806d59da06edb0b110eb2f68d8))
 
-# [1.1.0](https://github.com/entwico/podproxy/compare/v1.0.0...v1.1.0) (2026-04-15)
+## [1.1.0](https://github.com/entwico/podproxy/compare/v1.0.0...v1.1.0) (2026-04-15)
 
 
 ### Bug Fixes
@@ -23,7 +37,7 @@
 * **ci:** add Homebrew tap distribution via GoReleaser ([717d284](https://github.com/entwico/podproxy/commit/717d284383ff7481678ba5307b3d85ecf6a7c2f3))
 * **config:** add multi-phase kubeconfig discovery and separate resolved clusters ([95cab67](https://github.com/entwico/podproxy/commit/95cab6719664c96e63cdc7e5b2cfdc79fcdfc17b))
 
-# 1.0.0 (2026-02-17)
+## 1.0.0 (2026-02-17)
 
 
 ### Bug Fixes
