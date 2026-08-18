@@ -40,6 +40,11 @@ jobs:
         with:
           version: v2.10.1
 
+      - uses: golangci/golangci-lint-action@v7
+        with:
+          version: v2.10.1
+          working-directory: integrations/go
+
   node-test:
     name: Node Test (node ${{ matrix.node }})
     runs-on: ubuntu-latest
@@ -107,6 +112,9 @@ jobs:
 
       - name: Run tests
         run: go test -v -race -coverprofile=coverage.out ./...
+
+      - name: Run go integration tests
+        run: cd integrations/go && go test -v -race ./...
 
       - name: Upload coverage
         uses: actions/upload-artifact@v4

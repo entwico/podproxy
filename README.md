@@ -57,6 +57,7 @@ internal/
   nodeproxy/           Embedded Node.js proxy script (go:embed)
   proxy/               HTTP CONNECT proxy, SOCKS5 handler, and PAC file server
 integrations/node/     Node.js proxy integration (TypeScript source, esbuild)
+integrations/go/       Go proxy integration (importable library, separate module)
 install/               macOS launchd install/uninstall scripts and plist template
 ```
 
@@ -252,6 +253,62 @@ Once set, all Node.js processes will automatically route Kubernetes traffic thro
 | `DEV_PROXY_PAC_URL` | `http://127.0.0.1:9082` | PAC endpoint for auto-discovering domains |
 | `DEV_PROXY_MATCH` | | Additional regex pattern for hostnames to proxy |
 | `DEV_PROXY_LOG` | `error` | Log level: `error`, `info`, `debug` |
+
+## Go integration
+
+Go binaries cannot be injected into from the outside, so the Go integration is a small library ([integrations/go](integrations/go)) that apps wire in explicitly. It is a complete passthrough unless the `GO_PODPROXY` environment variable is set, so it is safe to ship in production binaries.
+
+### Setup
+
+```sh
+go get github.com/entwico/podproxy/integrations/go
+```
+
+Enable it on your dev machine (e.g. in `.zshenv`, next to the `NODE_OPTIONS` export):
+
+```sh
+export GO_PODPROXY=true
+```
+
+### Usage
+
+```go
+import podproxy "github.com/entwico/podproxy/integrations/go"
+
+func main() {
+    podproxy.Install() // routes all default HTTP/HTTPS traffic (http.DefaultTransport)
+}
+```
+
+Clients that don't use `http.DefaultTransport` take the dialer explicitly:
+
+```go
+// gRPC — the passthrough scheme hands the unresolved hostname to the dialer
+grpc.NewClient("passthrough:///api.staging:8080", grpc.WithContextDialer(podproxy.GrpcDialer()))
+
+// mongo
+options.Client().SetDialer(podproxy.Dialer())
+
+// go-redis
+&redis.Options{Dialer: podproxy.DialContext}
+
+// pgx
+config.DialFunc = podproxy.DialContext
+```
+
+### How it works
+
+1. On first use, fetches the PAC file from podproxy (`http://127.0.0.1:9082`) to discover which domains to proxy
+2. `DialContext` routes connections to matched hostnames through the SOCKS5 proxy and dials everything else directly — no DNS tricks needed, since Go dialers receive the hostname before resolution
+
+### Configuration
+
+| Environment variable | Default | Description |
+|---|---|---|
+| `GO_PODPROXY` | | `true`/`1` enables proxying; a `socks5://` URL enables it with a custom proxy address; unset disables everything |
+| `GO_PODPROXY_PAC_URL` | `http://127.0.0.1:9082` | PAC endpoint for auto-discovering domains |
+| `GO_PODPROXY_MATCH` | | Additional regex pattern for hostnames to proxy |
+| `GO_PODPROXY_LOG` | `error` | Log level: `error`, `info`, `debug` |
 
 ## Running as a macOS LaunchAgent
 

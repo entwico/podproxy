@@ -18,6 +18,12 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Tag Go integration module
+        run: |
+          # go resolves the nested module's version from a directory-prefixed tag
+          git tag -f "integrations/go/${GITHUB_REF_NAME}"
+          git push origin "integrations/go/${GITHUB_REF_NAME}"
+
       - uses: pnpm/action-setup@v4
         with:
           package_json_file: integrations/node/package.json

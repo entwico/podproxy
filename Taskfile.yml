@@ -30,6 +30,16 @@ tasks:
       - cp dist/proxy.mjs ../../internal/nodeproxy/embed/proxy.mjs
       - cp dist/proxy.cjs ../../internal/nodeproxy/embed/proxy.cjs
 
+  golib:test:
+    dir: integrations/go
+    cmds:
+      - go test -race ./...
+
+  golib:lint:
+    dir: integrations/go
+    cmds:
+      - '{{.GOLANGCI_LINT_CMD}} run'
+
   clean:
     cmds:
       - rm -rf {{.BUILD_DIR}}/*
@@ -41,9 +51,11 @@ tasks:
       - mkdir -p {{.BUILD_DIR}}
       - go test -v -race -coverprofile=./{{.BUILD_DIR}}/coverage.out ./...
       - go tool cover -html=./{{.BUILD_DIR}}/coverage.out -o ./{{.BUILD_DIR}}/coverage.html
+      - task: golib:test
 
   lint:
     cmds:
       - task: node:build
       - '{{.GOLANGCI_LINT_CMD}} version'
       - '{{.GOLANGCI_LINT_CMD}} run'
+      - task: golib:lint

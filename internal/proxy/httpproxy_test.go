@@ -204,8 +204,10 @@ func TestHTTPProxyForwardPOST(t *testing.T) {
 
 func TestHTTPProxyRewritesHostToLoopback(t *testing.T) {
 	gotHost := make(chan string, 1)
+
 	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		gotHost <- r.Host
+
 		w.WriteHeader(http.StatusOK)
 	}))
 	defer backend.Close()
@@ -232,6 +234,7 @@ func TestHTTPProxyRewritesHostToLoopback(t *testing.T) {
 	// as Host; the rewrite normalizes it to localhost so localhost-guarded
 	// upstreams (e.g. the MCP go-sdk) accept the port-forwarded request.
 	backendURL, _ := url.Parse(backend.URL)
+
 	want := net.JoinHostPort("localhost", backendURL.Port())
 	if got := <-gotHost; got != want {
 		t.Errorf("forwarded Host = %q, want %q", got, want)
