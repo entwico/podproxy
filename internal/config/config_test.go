@@ -668,3 +668,95 @@ func writeTempConfig(t *testing.T, content string) string {
 
 	return f.Name()
 }
+
+func TestSSHProxyIsOffByDefault(t *testing.T) {
+	isolateKubeconfigDiscovery(t)
+	kc := writeKubeconfig(t, t.TempDir(), "test.yaml", map[string]string{"minimal": ""})
+
+	cfg, _, err := LoadConfig(writeTempConfig(t, fmt.Sprintf("kubeconfigs:\n  - %q\n", kc)))
+	if err != nil {
+		t.Fatalf("LoadConfig() error: %v", err)
+	}
+
+	if cfg.SSHListenAddress != "" {
+		t.Errorf("SSHListenAddress = %q, want the ssh proxy disabled by default", cfg.SSHListenAddress)
+	}
+
+	if cfg.SSHHostKeyFile == "" || len(cfg.SSHAuthorizedKeys) == 0 {
+		t.Error("the host key and authorized keys need defaults, so enabling only takes sshListenAddress")
+	}
+}
+
+func TestValidateSSHSettings(t *testing.T) {
+	valid := Config{
+		ListenAddress:     "127.0.0.1:9080",
+		SSHListenAddress:  "127.0.0.1:9083",
+		SSHHostKeyFile:    "~/.podproxy/ssh_host_ed25519_key",
+		SSHAuthorizedKeys: []string{"~/.ssh/*.pub"},
+	}
+
+	if err := valid.Validate(); err != nil {
+		t.Fatalf("Validate() error: %v", err)
+	}
+
+	badAddress := valid
+	badAddress.SSHListenAddress = "not-a-valid-address"
+
+	if err := badAddress.Validate(); err == nil {
+		t.Error("Validate() should fail with invalid sshListenAddress")
+	}
+
+	noHostKey := valid
+	noHostKey.SSHHostKeyFile = ""
+
+	if err := noHostKey.Validate(); err == nil {
+		t.Error("Validate() should fail without sshHostKeyFile")
+	}
+
+	noKeys := valid
+	noKeys.SSHAuthorizedKeys = nil
+
+	if err := noKeys.Validate(); err == nil {
+		t.Error("Validate() should fail without sshAuthorizedKeys")
+	}
+
+	disabled := Config{ListenAddress: "127.0.0.1:9080"}
+	if err := disabled.Validate(); err != nil {
+		t.Errorf("Validate() should ignore the ssh settings while the ssh proxy is off: %v", err)
+	}
+}
+
+func TestSSHAuthorizedKeyFilesExpandsGlobs(t *testing.T) {
+	dir := t.TempDir()
+
+	for _, name := range []string{"id_ed25519.pub", "id_rsa.pub", "id_ed25519"} {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte("x"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	cfg := Config{SSHAuthorizedKeys: []string{filepath.Join(dir, "*.pub"), filepath.Join(dir, "nothing-*.pub")}}
+
+	files, err := cfg.SSHAuthorizedKeyFiles()
+	if err != nil {
+		t.Fatalf("SSHAuthorizedKeyFiles() error: %v", err)
+	}
+
+	want := []string{filepath.Join(dir, "id_ed25519.pub"), filepath.Join(dir, "id_rsa.pub")}
+	if strings.Join(files, ",") != strings.Join(want, ",") {
+		t.Errorf("files = %v, want %v", files, want)
+	}
+}
+
+func TestSSHHostKeyPathExpandsTilde(t *testing.T) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		t.Skip("no home directory")
+	}
+
+	cfg := Config{SSHHostKeyFile: "~/.podproxy/ssh_host_ed25519_key"}
+
+	if got, want := cfg.SSHHostKeyPath(), filepath.Join(home, ".podproxy", "ssh_host_ed25519_key"); got != want {
+		t.Errorf("SSHHostKeyPath() = %q, want %q", got, want)
+	}
+}

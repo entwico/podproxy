@@ -14,6 +14,7 @@ import (
 	"github.com/spf13/pflag"
 	"github.com/things-go/go-socks5"
 	"github.com/xlab/closer"
+	"golang.org/x/crypto/ssh"
 
 	"github.com/entwico/podproxy/internal/config"
 	"github.com/entwico/podproxy/internal/kube"
@@ -118,6 +119,29 @@ func main() {
 		}()
 	}
 
+	if cfg.SSHListenAddress != "" {
+		sshProxy, err := createSSHProxy(cfg, dialer, logger.With("component", "ssh-proxy"))
+		if err != nil {
+			logger.Error("ssh proxy configuration error", "error", err)
+			os.Exit(1)
+		}
+
+		go func() {
+			<-ctx.Done()
+
+			if err := sshProxy.Close(); err != nil {
+				logger.Error("ssh proxy shutdown error", "error", err)
+			}
+		}()
+
+		go func() {
+			if err := sshProxy.ListenAndServe(ctx, cfg.SSHListenAddress); err != nil {
+				logger.Error("ssh proxy server failed", "error", err)
+				stop()
+			}
+		}()
+	}
+
 	if cfg.PACListenAddress != "" {
 		pacServer := &proxy.PACServer{
 			ClusterNames:     clusterNames(clusters),
@@ -153,6 +177,37 @@ type slogErrorLogger struct {
 
 func (l *slogErrorLogger) Errorf(format string, args ...any) {
 	l.logger.Error(fmt.Sprintf(format, args...))
+}
+
+// createSSHProxy loads (or creates) the host key and the authorized keys and
+// returns the ssh proxy routing through dialer.
+func createSSHProxy(cfg *config.Config, dialer *kube.ClusterDialer, logger *slog.Logger) (*proxy.SSHProxy, error) {
+	hostKey, err := proxy.LoadOrCreateHostKey(cfg.SSHHostKeyPath())
+	if err != nil {
+		return nil, err
+	}
+
+	files, err := cfg.SSHAuthorizedKeyFiles()
+	if err != nil {
+		return nil, err
+	}
+
+	authorizedKeys, err := proxy.LoadAuthorizedKeys(files)
+	if err != nil {
+		return nil, err
+	}
+
+	logger.Info("starting ssh proxy server",
+		"addr", cfg.SSHListenAddress,
+		"hostKey", ssh.FingerprintSHA256(hostKey.PublicKey()),
+		"authorizedKeys", len(authorizedKeys),
+	)
+
+	return &proxy.SSHProxy{
+		DialContext: dialer.DialContext,
+		Config:      proxy.NewSSHServerConfig(hostKey, authorizedKeys),
+		Logger:      logger,
+	}, nil
 }
 
 // gracefulShutdown starts a background goroutine that shuts down the server

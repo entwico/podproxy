@@ -32,6 +32,9 @@ type Config struct {
 	ListenAddress         string    `yaml:"listenAddress"`
 	HTTPListenAddress     string    `yaml:"httpListenAddress"`
 	PACListenAddress      string    `yaml:"pacListenAddress"`
+	SSHListenAddress      string    `yaml:"sshListenAddress"`
+	SSHHostKeyFile        string    `yaml:"sshHostKeyFile"`
+	SSHAuthorizedKeys     []string  `yaml:"sshAuthorizedKeys"`
 	SkipDefaultKubeconfig bool      `yaml:"skipDefaultKubeconfig"`
 	SkipKubeconfigEnv     bool      `yaml:"skipKubeconfigEnv"`
 	Kubeconfigs           []string  `yaml:"kubeconfigs"`
@@ -113,7 +116,45 @@ func (c *Config) Validate() error {
 		}
 	}
 
+	if c.SSHListenAddress == "" {
+		return nil
+	}
+
+	if _, _, err := net.SplitHostPort(c.SSHListenAddress); err != nil {
+		return fmt.Errorf("invalid sshListenAddress %q: %w", c.SSHListenAddress, err)
+	}
+
+	if c.SSHHostKeyFile == "" {
+		return errors.New("sshHostKeyFile is required when sshListenAddress is set")
+	}
+
+	if len(c.SSHAuthorizedKeys) == 0 {
+		return errors.New("sshAuthorizedKeys is required when sshListenAddress is set")
+	}
+
 	return nil
+}
+
+// SSHHostKeyPath returns the ssh host key file with "~" expanded.
+func (c *Config) SSHHostKeyPath() string {
+	return expandTilde(c.SSHHostKeyFile)
+}
+
+// SSHAuthorizedKeyFiles returns the authorized key files, with "~" expanded
+// and globs resolved; a glob matching nothing contributes no files.
+func (c *Config) SSHAuthorizedKeyFiles() ([]string, error) {
+	var files []string
+
+	for _, pattern := range c.SSHAuthorizedKeys {
+		paths, err := expandGlobPattern(expandTilde(pattern))
+		if err != nil {
+			return nil, err
+		}
+
+		files = append(files, paths...)
+	}
+
+	return files, nil
 }
 
 // ValidateClusters checks that the resolved clusters are well-formed.

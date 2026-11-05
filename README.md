@@ -12,6 +12,7 @@ The proxy resolves services to ready pod endpoints via the EndpointSlice API, th
 
 - **SOCKS5 proxy** for TCP connections to any Kubernetes pod or service
 - **HTTP CONNECT proxy** for HTTPS tunneling and plain HTTP forwarding
+- **SSH tunnel endpoint** (`direct-tcpip` only) for tools that tunnel over SSH but cannot speak SOCKS5
 - **Passthrough** for non-Kubernetes traffic — regular hostnames are dialed directly
 - **PAC auto-configuration** server for automatic browser/OS proxy setup
 - **Multi-cluster** support via multiple kubeconfig files or contexts
@@ -159,6 +160,9 @@ log:
 | `listenAddress` | `127.0.0.1:9080` | SOCKS5 proxy listen address |
 | `httpListenAddress` | *(disabled)* | HTTP CONNECT proxy listen address |
 | `pacListenAddress` | *(disabled)* | PAC file server listen address |
+| `sshListenAddress` | *(disabled)* | SSH tunnel endpoint listen address, e.g. `127.0.0.1:9083` |
+| `sshHostKeyFile` | `~/.podproxy/ssh_host_ed25519_key` | SSH host key; generated on first start and kept, so its fingerprint stays stable |
+| `sshAuthorizedKeys` | `~/.ssh/*.pub` | Files with the public keys allowed to connect (authorized_keys format, globs and `~` supported); keys with options (`from=`, `permitopen=`, `restrict`, ...) are refused, since podproxy cannot enforce them |
 | `skipDefaultKubeconfig` | `false` | Skip loading the default `~/.kube/config` |
 | `skipKubeconfigEnv` | `false` | Skip reading the `KUBECONFIG` environment variable |
 | `kubeconfigs` | | List of kubeconfig file paths or glob patterns (supports `~`) |
@@ -182,6 +186,38 @@ http://127.0.0.1:8081/
 - **Chrome/Edge**: Uses the system proxy settings
 
 If the HTTP proxy is also enabled, the PAC file includes both `PROXY` and `SOCKS5` directives for maximum compatibility.
+
+## SSH tunnel endpoint
+
+When `sshListenAddress` is set, podproxy also runs an SSH server that does one thing: open `direct-tcpip` channels (what `ssh -L`, `ProxyJump` and SSH-tunnel options of database tools use). The target host of each channel goes through the same routing as SOCKS5, unresolved, so cluster addresses work as they are. Use it for tools that can tunnel over SSH but cannot use a SOCKS5 proxy.
+
+- Clients authenticate with a public key from `sshAuthorizedKeys`; the user name is ignored. Keys with options are refused rather than accepted without their restrictions
+- Shell, exec, sftp and remote forwarding (`ssh -R`) are refused
+- Keep it on a loopback address: whoever holds an authorized key can reach everything the proxy can
+
+```yaml
+sshListenAddress: "127.0.0.1:9083"
+```
+
+Forward a local port to a cluster service:
+
+```sh
+ssh -N -p 9083 -L 15432:postgres.db.staging:5432 podproxy@127.0.0.1
+```
+
+A database tool with an SSH tunnel, e.g. [DBHub](https://github.com/bytebase/dbhub):
+
+```toml
+[[sources]]
+id = "staging"
+dsn = "postgres://app:${DB_PASSWORD}@postgres.db.staging:5432/app"
+ssh_host = "127.0.0.1"
+ssh_port = 9083
+ssh_user = "podproxy"
+ssh_key = "~/.ssh/id_ed25519"
+```
+
+podproxy logs the host key fingerprint at startup (`starting ssh proxy server ... hostKey=SHA256:...`) for clients that pin it.
 
 ## Examples
 
