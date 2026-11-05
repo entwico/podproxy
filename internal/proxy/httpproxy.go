@@ -179,27 +179,55 @@ func removeHopByHopHeaders(h http.Header) {
 	}
 }
 
-// relay copies data bidirectionally between two connections.
-// When one direction completes, it closes the destination to unblock the other.
-// The caller's defers still call Close, which is safe since net.Conn.Close is idempotent.
-func relay(a, b net.Conn) {
+// closeWriter is implemented by connections that can signal end of data while
+// still reading (TCP, TLS, SSH channels, port-forward streams).
+type closeWriter interface {
+	CloseWrite() error
+}
+
+// relay copies data bidirectionally between two connections and closes both
+// once both directions are done. A direction that ends with EOF only
+// half-closes its destination, so the peer still receives the other
+// direction's remaining data (a request followed by EOF, then the response).
+// A direction that fails closes both sides to unblock the other copy.
+// The caller's defers still call Close, which is safe since Close is idempotent.
+func relay(a, b io.ReadWriteCloser) {
 	done := make(chan struct{})
 
 	go func() {
-		if _, err := io.Copy(b, a); err != nil && !isClosedConnErr(err) {
-			logRelayError("relay a→b copy error", err)
-		}
-
-		b.Close()
+		pipe(b, a, "relay a→b copy error")
 		close(done)
 	}()
 
-	if _, err := io.Copy(a, b); err != nil && !isClosedConnErr(err) {
-		logRelayError("relay b→a copy error", err)
-	}
+	pipe(a, b, "relay b→a copy error")
+	<-done
 
 	a.Close()
-	<-done
+	b.Close()
+}
+
+func pipe(dst, src io.ReadWriteCloser, msg string) {
+	_, err := io.Copy(dst, src)
+	if err == nil {
+		closeWrite(dst)
+		return
+	}
+
+	if !isClosedConnErr(err) {
+		logRelayError(msg, err)
+	}
+
+	dst.Close()
+	src.Close()
+}
+
+// closeWrite half-closes c, or closes it fully when it cannot half-close.
+func closeWrite(c io.ReadWriteCloser) {
+	if cw, ok := c.(closeWriter); ok && cw.CloseWrite() == nil {
+		return
+	}
+
+	c.Close()
 }
 
 func isClosedConnErr(err error) bool {

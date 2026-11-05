@@ -20,6 +20,7 @@ type StreamConn struct {
 	remoteTarget string
 
 	closeOnce   sync.Once
+	writeClosed atomic.Bool
 	remoteErrMu sync.Mutex
 	remoteErr   error
 	errDone     chan struct{}
@@ -81,12 +82,24 @@ func (sc *StreamConn) BytesRead() int64        { return sc.bytesRead.Load() }
 func (sc *StreamConn) BytesWritten() int64     { return sc.bytesWritten.Load() }
 func (sc *StreamConn) Duration() time.Duration { return time.Since(sc.createdAt) }
 
+// CloseWrite half-closes the connection: the remote side sees EOF while
+// reads keep working. Closing a SPDY stream only ends this side's data.
+func (sc *StreamConn) CloseWrite() error {
+	if !sc.writeClosed.CompareAndSwap(false, true) {
+		return nil
+	}
+
+	return sc.dataStream.Close()
+}
+
 func (sc *StreamConn) Close() error {
 	var err error
 
 	sc.closeOnce.Do(func() {
-		// close the data stream first so the remote side sees EOF.
-		err = sc.dataStream.Close()
+		// close the data stream first so the remote side sees EOF, unless CloseWrite already did.
+		if sc.writeClosed.CompareAndSwap(false, true) {
+			err = sc.dataStream.Close()
+		}
 		// explicitly close the error stream before the SPDY connection to
 		// ensure resources are released in order.
 		if closeErr := sc.errorStream.Close(); err == nil {
