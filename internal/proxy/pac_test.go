@@ -73,7 +73,7 @@ func TestPACServerHTTPHandler(t *testing.T) {
 	}
 
 	rec := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodGet, "/proxy.pac", nil)
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/proxy.pac", nil)
 
 	s.ServeHTTP(rec, req)
 

@@ -1,5 +1,5 @@
 module github.com/entwico/podproxy/integrations/go
 
-go 1.24.0
+go 1.27.3
 
-require golang.org/x/net v0.47.0
+require golang.org/x/net v0.62.0

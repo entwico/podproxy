@@ -8,7 +8,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
-	"sort"
+	"slices"
 	"strings"
 
 	"gopkg.in/yaml.v3"
@@ -303,7 +303,7 @@ func loadKubeconfigFile(path, source string, seenFiles map[string]bool) ([]Resol
 		contextNames = append(contextNames, name)
 	}
 
-	sort.Strings(contextNames)
+	slices.Sort(contextNames)
 	slog.Info("found kubeconfig contexts", "source", source, "path", path, "contexts", contextNames)
 
 	return clusters, nil
@@ -319,7 +319,7 @@ func expandGlobPattern(pattern string) ([]string, error) {
 		return nil, fmt.Errorf("invalid glob pattern %q: %w", pattern, err)
 	}
 
-	sort.Strings(matches)
+	slices.Sort(matches)
 
 	return matches, nil
 }

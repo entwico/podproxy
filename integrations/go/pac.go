@@ -44,7 +44,7 @@ func fetchPac(pacURL string) (string, error) {
 	// a dedicated transport keeps the fetch off http.DefaultTransport and away from proxy env vars
 	client := &http.Client{Timeout: pacFetchTimeout, Transport: &http.Transport{}}
 
-	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, pacURL, nil)
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, pacURL, nil) //nolint:gosec // the URL is operator-controlled dev config
 	if err != nil {
 		return "", err
 	}

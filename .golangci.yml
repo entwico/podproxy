@@ -17,6 +17,7 @@ linters:
     - errorlint
     - exhaustive
     - exhaustruct
+    - exhaustruct_v5
     - forbidigo
     - forcetypeassert
     - funlen
@@ -25,6 +26,7 @@ linters:
     - gocognit
     - gocritic
     - godox
+    - gomodguard
     - interfacebloat
     - ireturn
     - lll
@@ -43,6 +45,7 @@ linters:
     - varnamelen
     - wrapcheck
     - wsl
+    - wsl_v5
   settings:
     revive:
       severity: warning
@@ -100,6 +103,11 @@ linters:
       - common-false-positives
       - legacy
       - std-error-handling
+    rules:
+      # table-driven test data repeats literals by design
+      - path: _test\.go
+        linters:
+          - goconst
     paths:
       - third_party$
       - builtin$

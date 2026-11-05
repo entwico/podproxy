@@ -8,7 +8,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"k8s.io/apimachinery/pkg/util/httpstream"
+	"k8s.io/apimachinery/pkg/util/httpstream" //nolint:staticcheck // client-go/transport/spdy still returns this type
 )
 
 // StreamConn wraps a pair of SPDY streams (data + error) as a net.Conn.

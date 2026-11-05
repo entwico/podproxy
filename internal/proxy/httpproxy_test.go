@@ -24,7 +24,7 @@ func TestHTTPProxyNonAbsoluteURL(t *testing.T) {
 
 	rec := httptest.NewRecorder()
 	// non-absolute URL (relative path only)
-	req := httptest.NewRequest(http.MethodGet, "/relative-path", nil)
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/relative-path", nil)
 
 	proxy.ServeHTTP(rec, req)
 
@@ -41,7 +41,7 @@ func TestHTTPConnectDialFailure(t *testing.T) {
 	}
 
 	rec := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodConnect, "example.com:443", nil)
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodConnect, "example.com:443", nil)
 
 	proxy.ServeHTTP(rec, req)
 
@@ -144,7 +144,7 @@ func TestHTTPProxyForwardGET(t *testing.T) {
 
 	req, _ := http.NewRequestWithContext(context.Background(), http.MethodGet, backend.URL+"/test", nil)
 
-	resp, err := client.Do(req) //nolint:gosec // test uses controlled httptest URLs
+	resp, err := client.Do(req)
 	if err != nil {
 		t.Fatalf("GET through proxy: %v", err)
 	}
@@ -186,7 +186,7 @@ func TestHTTPProxyForwardPOST(t *testing.T) {
 	req, _ := http.NewRequestWithContext(context.Background(), http.MethodPost, backend.URL+"/submit", strings.NewReader("request body"))
 	req.Header.Set("Content-Type", "text/plain")
 
-	resp, err := client.Do(req) //nolint:gosec // test uses controlled httptest URLs
+	resp, err := client.Do(req)
 	if err != nil {
 		t.Fatalf("POST through proxy: %v", err)
 	}
@@ -224,7 +224,7 @@ func TestHTTPProxyRewritesHostToLoopback(t *testing.T) {
 
 	req, _ := http.NewRequestWithContext(context.Background(), http.MethodGet, backend.URL+"/x", nil)
 
-	resp, err := client.Do(req) //nolint:gosec // test uses controlled httptest URLs
+	resp, err := client.Do(req)
 	if err != nil {
 		t.Fatalf("GET through proxy: %v", err)
 	}
@@ -275,7 +275,7 @@ func TestHTTPProxyHopByHopHeaders(t *testing.T) {
 	req.Header.Set("Proxy-Authorization", "Basic secret")
 	req.Header.Set("Connection", "keep-alive")
 
-	resp, err := client.Do(req) //nolint:gosec // test uses controlled httptest URLs
+	resp, err := client.Do(req)
 	if err != nil {
 		t.Fatalf("GET through proxy: %v", err)
 	}
@@ -309,7 +309,7 @@ func TestHTTPProxyForwardDialFailure(t *testing.T) {
 
 	req, _ := http.NewRequestWithContext(context.Background(), http.MethodGet, "http://unreachable.example.com/test", nil)
 
-	resp, err := client.Do(req) //nolint:gosec // test uses controlled httptest URLs
+	resp, err := client.Do(req)
 	if err != nil {
 		t.Fatalf("GET through proxy: %v", err)
 	}

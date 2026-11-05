@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"k8s.io/apimachinery/pkg/util/httpstream"
+	"k8s.io/apimachinery/pkg/util/httpstream" //nolint:staticcheck // client-go/transport/spdy still returns this type
 )
 
 // fakeStream records writes and closes; it has nothing to read.
