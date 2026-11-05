@@ -1,5 +1,16 @@
 # Changelog
 
+## v1.4.0 (2026-11-05)
+
+### Minor Changes
+
+- add an SSH tunnel endpoint (`sshListenAddress`, off by default): `direct-tcpip` channels are routed like SOCKS5 connections, so tools that tunnel over SSH (ssh -L, ProxyJump, DBHub) reach cluster addresses without SOCKS5 support; public-key auth against `sshAuthorizedKeys`, shell/exec/sftp and remote forwarding refused
+- add Go integration library (integrations/go, requires Go 1.27.3): env-gated SOCKS5 dialer for Go apps, enabled via GO_PODPROXY
+
+### Patch Changes
+
+- fix: a client that half-closes its connection (sends EOF, then waits for the reply) no longer loses the reply. HTTP CONNECT tunnels used to close the upstream on the client's EOF; they now only half-close it, and so do SOCKS5 and SSH connections to cluster targets
+
 ## v1.3.0 (2026-07-13)
 
 ### Minor Changes
